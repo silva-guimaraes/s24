@@ -1,4 +1,5 @@
 
+#include <signal.h>
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -9,7 +10,7 @@
 #define max_token_len 256
 #define token_stride max_token_len
 #define max_tokens 300
-#define max_stack 200
+#define max_stack 1000
 #define max_vars 100
 #define program_max_tokens tokens + token_count*max_token_len
 
@@ -38,6 +39,7 @@ typedef value (*opfunc)();
 
 int stack_size = 0;
 value stack[max_stack];
+int stack_print_limit = 12;
 
 int token_count = 0;
 char tokens[max_token_len * max_tokens];
@@ -120,7 +122,7 @@ char* pretty_value(value v) {
 
 void print_pretty_value(value v) {
     char* pp = pretty_value(v);
-    fprintf(stderr, "%s\n", pp);
+    printf("%s\n", pp);
     free(pp);
 }
 
@@ -165,7 +167,9 @@ void print_vars() {
 }
 
 void print_stack() {
-    for (int i = stack_size-1; i >= 0; i--) {
+    int limit = stack_size < stack_print_limit ?  0 : stack_size - stack_print_limit;;
+
+    for (int i = stack_size-1; i >= limit; i--) {
 
         value v = stack[i];
 
@@ -179,6 +183,11 @@ void print_stack() {
 }
 
 void push(value v) {
+    if (stack_size >= max_stack) {
+        fprintf(stderr, "error: max stack achieved (%d)!\n", max_stack);
+        print_stack();
+        exit(1);
+    }
     stack[stack_size++] = v;
 }
 
@@ -587,11 +596,15 @@ value reverse() {
 
 
 void execute(char* start, int amount) {
-    char* last = start + amount*token_stride;
+    char* last;
+    int parens;
 
-    int parens = 0;
+rewind:
+    last = start + amount*token_stride;
+    parens = 0;
 
     for (char* current = start; current < last; current += token_stride) {
+
 
         if (strcmp(current, "((" /*))*/) == 0 || strcmp(current, /*((*/"))") == 0) {
             continue;
@@ -650,15 +663,17 @@ void execute(char* start, int amount) {
                 .data.nest = NULL,
                 .size = 0,
             };
-            char* i = current + max_token_len;
-            for (; i < program_max_tokens; i += max_token_len) {
+            int brackets = 1;
+            char* i = current + token_stride;
+            for (; i < last; i += max_token_len) {
                 if (strcmp(i, "[" /*]*/ ) == 0) {
-                    fprintf(stderr, "error: forbidden nested nesting!\n");
-                    exit(1);
+                    brackets++;
                 }
                 if (strcmp(i, /*[*/ "]") == 0) {
-                    break;
+                    brackets--;
                 }
+                if (brackets == 0)
+                    break;
 
                 new_nest.data.nest = realloc(new_nest.data.nest , max_token_len * ++new_nest.size);
                 strcpy(new_nest.data.nest + (new_nest.size-1)*token_stride, i);
@@ -673,7 +688,6 @@ void execute(char* start, int amount) {
             push(new_nest);
             continue;
         }
-
 
 
         double number;
@@ -800,13 +814,13 @@ void execute(char* start, int amount) {
             push(list());
         }
 
-        else if (strcmp(current, "+1")   == 0)
+        else if (strcmp(current, "++")   == 0)
         {
             push(new_unit(1));
             push(sum());
         }
 
-        else if (strcmp(current, "-1")   == 0)
+        else if (strcmp(current, "--")   == 0)
         {
             push(new_unit(-1));
             push(sum());
@@ -868,9 +882,32 @@ void execute(char* start, int amount) {
             value nesting = pop();
             if (nesting.type != nest) {
                 fprintf(stderr, "error: can't execute what is not a nest!\n");
+                print_pretty_value(nesting);
                 exit(1);
             }
             execute(nesting.data.nest, nesting.size);
+        }
+
+        else if (strcmp(current, "rx") == 0)
+        {
+            value nesting = pop();
+            if (nesting.type != nest) {
+                fprintf(stderr, "error: can't execute what is not a nest!\n");
+                print_pretty_value(nesting);
+                exit(1);
+            }
+
+            if (nesting.data.nest != start) {
+                fprintf(stderr, "error: can't rewind a nest outside of itself! "
+                        "try using the 'x' command!\n");
+                print_pretty_value(nesting);
+                exit(1);
+            }
+            // execute(nesting.data.nest, nesting.size);
+
+            start = nesting.data.nest;
+            amount = nesting.size;
+            goto rewind;
         }
 
         else if (strcmp(current, ".") == 0)
@@ -878,6 +915,7 @@ void execute(char* start, int amount) {
             value arr = pop();
             if (arr.type != array) {
                 fprintf(stderr, "error: can't unbind what is not an array!\n");
+                print_pretty_value(arr);
                 exit(1);
             }
             for (int i = 0; i < arr.size; i++) {
@@ -914,6 +952,8 @@ void execute(char* start, int amount) {
             int idx;
             if ((idx = find_var(current)) < 0) {
                 fprintf(stderr, "error: unrecognized token: \"%s\"!\n", current);
+                fprintf(stderr, "available variables:\n");
+                print_vars();
                 exit(1);
             }
             push(var_data[idx]);
@@ -921,15 +961,63 @@ void execute(char* start, int amount) {
     }
 }
 
+void print_usage() {
+    printf("usage: s24 [options] input-file\n\n"
+           "options:\n"
+           "   -h, --help\tprint this help text and exit\n");
+}
+
+void print_stack_and_quit() {
+    fflush(stdout);
+    fflush(stderr);
+
+    fprintf(stderr, "SIGINT\n");
+    print_stack();
+    exit(1);
+}
+
 
 int main(int argc, char** argv) {
 
+    signal(SIGINT, print_stack_and_quit);
+
     // input
-    if (argc != 2) {
-        fprintf(stderr, "argc != 2");
+    char* input_path = NULL;
+    for (int i = 1; i < argc; i++) {
+        if (strcmp(argv[i], "--help") == 0 || strcmp(argv[i], "--help") == 0)
+        {
+            print_usage();
+            return 0;
+        }
+        else if (*argv[i] == '-')
+        {
+            fprintf(stderr, "error: unrecognized option \"%s\"!\n", argv[i]);
+            print_usage();
+            return 1;
+        }
+
+        else if (input_path == NULL)
+        {
+            input_path = argv[i];
+        }
+
+        else {
+            fprintf(stderr, "error: unrecognized argument \"%s\"!\n", argv[i]);
+            return 1;
+        }
+    }
+
+    if (!input_path) {
+        fprintf(stderr, "error: missing input file.\n");
+        print_usage();
         return 1;
     }
-    FILE* in = fopen(argv[1], "r");
+
+    FILE* in = fopen(input_path, "r");
+    if (!in) {
+        fprintf(stderr, "error: can't open file \"%s\"\n", input_path);
+        return 1;
+    }
 
 
     // tokenizer
