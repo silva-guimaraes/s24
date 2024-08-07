@@ -928,7 +928,12 @@ rewind:
         }
 
 
-        if      (strcmp(current, "+") == 0)
+        if      (strcmp(current, "nop") == 0)
+        {
+            continue;
+        }
+
+        else if (strcmp(current, "+") == 0)
         {
             push(sum());
         }
@@ -993,7 +998,7 @@ rewind:
                 if (goto_label[0] != '.')
                     continue;
 
-                if (goto_label[0] == '.' || strlen(goto_label) == 1) {
+                if (goto_label[0] == '.' && strlen(goto_label) == 1) {
                     fprintf(stderr, "error: goto label \"%s\" is not a label!\n", goto_label);
                     exit(1);
                 }
@@ -1095,7 +1100,8 @@ rewind:
 
         else if (strcmp(current, "fmt")  == 0) 
         {
-            print_pretty_value(pop());
+            value string = pop();
+            print_pretty_value(string);
         }
 
         else if (strcmp(current, "ps")  == 0) 
