@@ -30,6 +30,7 @@ typedef struct value {
         char* nest;
     } data;
     int size;
+    bool auto_exec;
 } value;
 
 
@@ -76,6 +77,25 @@ char* get_string(value string) {
         ret[i] = string.data.array[i].data.c;
     }
     ret[string.size] = '\0';
+    return ret;
+}
+
+#define max(x, y) x > y ? x : y
+#define min(x, y) x < y ? x : y
+
+char* get_string_slice(value string, int start, int end) {
+    assert(is_string(string));
+    assert(end >= start);
+
+    end = min(string.size, end);
+
+    int size = end - start;
+
+    char* ret = malloc(sizeof(char) * size + 1);
+    for (int i = 0; i < size; i++){
+        ret[i] = string.data.array[i + start].data.c;
+    }
+    ret[size] = '\0';
     return ret;
 }
 
@@ -406,8 +426,6 @@ void free_value(value v) {
 
 // binary built-ins
 
-#define max(x, y) x > y ? x : y
-
 #define binary_iter(lvalue)                                 \
 bool map_val1 = !is_unit_constant(val1), map_val2 = !is_unit_constant(val2);  \
 int size = max(val1.size, val2.size);                       \
@@ -626,7 +644,7 @@ double __is_prime(double x) {
 }
 double __gt0(double x) { return x > 0; }
 double __lt0(double x) { return x < 0; }
-double __neg(double x) { return !x; }
+double __not(double x) { return !x; }
 
 def_simple_unary_func_op(   _round,         roundl  );
 def_simple_unary_func_op(    is_prime,    __is_prime);
@@ -635,7 +653,7 @@ def_simple_unary_func_op(   _cos,           cos     );
 def_simple_unary_func_op(   _sin,           sin     );
 def_simple_unary_func_op(    gt0,         __gt0     );
 def_simple_unary_func_op(    lt0,         __lt0     );
-def_simple_unary_func_op(    negative,    __neg     );
+def_simple_unary_func_op(    not,         __not     );
 
 // special
 
@@ -933,6 +951,11 @@ rewind:
             continue;
         }
 
+        else if (strcmp(current, "pop") == 0)
+        {
+            pop();
+        }
+
         else if (strcmp(current, "+") == 0)
         {
             push(sum());
@@ -968,7 +991,7 @@ rewind:
             push(or());
         }
 
-        else if (strcmp(current, "->")  == 0)
+        else if (strcmp(current, "->")  == 0 || strcmp(current, "!->")  == 0)
         {
             value assign = pop(), var;
 
@@ -982,6 +1005,9 @@ rewind:
             else {
                 idx = var_count++;
             }
+
+            if (current[0] == '!')
+                assign.auto_exec = true;
 
             var_names[idx] = name;
             var_data[idx] = assign;
@@ -1178,7 +1204,7 @@ rewind:
 
         else if (strcmp(current, "del") == 0)
         {
-            push(negative());
+            push(not());
             push(mask());
         }
 
@@ -1187,10 +1213,10 @@ rewind:
             push(reverse());
         }
 
-        else if (strcmp(current, "neg") == 0)
-        {
-            push(negative());
-        }
+        // else if (strcmp(current, "neg") == 0)
+        // {
+        //     push(negative());
+        // }
 
         else if (strcmp(current, "clr") == 0)
         {
@@ -1317,20 +1343,28 @@ rewind:
         }
 
         else if (strcmp(current, "ss") == 0)
-{
+        {
             char* delimiter = get_string(pop());
-            value string = pop();
 
+            value string = pop();
+            string = array_at(string, 0);
+
+            int delimiter_len = strlen(delimiter);
             value r = new_array(0);
             value b = new_array(0);
 
             for (int i = 0; i < string.size; i++) {
-                value at = array_at(string, i);
+                char* s = get_string_slice(string, i, i+delimiter_len);
+                if (strcmp(s, delimiter) == 0) {
+
+                }
+                free(s);
             }
             if (b.size > 0)
                 array_append(&r, b);
 
             push(r);
+            free(delimiter);
         }
 
         else if (strcmp(current, "a2n") == 0)
@@ -1387,7 +1421,12 @@ rewind:
                 print_vars();
                 exit(1);
             }
-            push(var_data[idx]);
+            value v = var_data[idx];
+            if (v.type == nest && v.auto_exec) {
+                execute(v.data.nest, v.size);
+                continue;
+            }
+            push(v);
         }
 
     force_continue: {}
