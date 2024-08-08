@@ -1,4 +1,3 @@
-
 #include <signal.h>
 #include <math.h>
 #include <stdio.h>
@@ -8,6 +7,7 @@
 #include <stdbool.h>
 #include <unistd.h>
 #include <libgen.h>
+#include "std.c"
 
 #define max_token_len 256
 #define token_stride max_token_len
@@ -39,7 +39,6 @@ value stack[max_stack];
 int stack_print_limit = 12;
 
 int token_count = 0;
-char tokens[max_token_len * max_tokens];
 
 int var_count = 0;
 char* var_names[max_vars];
@@ -367,6 +366,25 @@ value new_unit(double c) {
     return arr;
 }
 
+value wrap_array(value v) {
+    value a = new_array(1);
+    a.data.array[0] = v;
+    return a;
+}
+
+
+value copy(value v) {
+    if (v.type != array)
+        return v;
+
+    value new = new_array(v.size);
+
+    for (int i = 0; i < new.size; i++) {
+        new.data.array[i] = copy(array_at(v, i));
+    }
+
+    return new;
+}
 
 double get_unit(value array) {
     assert(is_unit_constant(array));
@@ -521,10 +539,6 @@ value __equal(value v1, value v2) {
     exit(1);
 }
 
-value __nequal(value v1, value v2) {
-    return new_constant(!get_constant(__equal(v1, v2)));
-}
-
 #define def_binary_op2(name, func)\
 value name() { \
     value val1 = pop(), val2 = pop(); \
@@ -596,7 +610,6 @@ value __or(value v1, value v2) {
 
 def_binary_op2(equal, __equal);
 def_binary_op2(or, __or);
-def_binary_op2(not_equal, __nequal);
 
 
 
@@ -913,7 +926,7 @@ rewind:
                 new_nest.data.nest = realloc(new_nest.data.nest , max_token_len * ++new_nest.size);
                 strcpy(new_nest.data.nest + (new_nest.size-1)*token_stride, i);
             }
-            if (i == program_max_tokens) {
+            if (i == last) {
                 fprintf(stderr, "error: unmatched nesting!\n");
                 exit(1);
             }
@@ -946,12 +959,7 @@ rewind:
         }
 
 
-        if      (strcmp(current, "nop") == 0)
-        {
-            continue;
-        }
-
-        else if (strcmp(current, "pop") == 0)
+        if (strcmp(current, "pop") == 0)
         {
             pop();
         }
@@ -976,14 +984,14 @@ rewind:
             push(division());
         }
 
+        else if (strcmp(current, "not") == 0)
+        {
+            push(not());
+        }
+
         else if (strcmp(current, "=") == 0)
         {
             push(equal());
-        }
-
-        else if (strcmp(current, "!=") == 0)
-        {
-            push(not_equal());
         }
 
         else if (strcmp(current, "or") == 0)
@@ -1000,7 +1008,7 @@ rewind:
 
             if ((idx = find_var(name)) >= 0)
             {
-                free_value(var_data[idx]);
+                // free_value(var_data[idx]); // problemático
             }
             else {
                 idx = var_count++;
@@ -1098,15 +1106,7 @@ rewind:
 
         else if (strcmp(current, "at") == 0)
         {
-            push(at());
-        }
-
-        else if (strcmp(current, "lst") == 0)
-        {
-            push(new_unit(peek().size));
-            push(new_unit(-1));
-            push(sum());
-            push(at());
+            push(wrap_array(at()));
         }
 
         else if (strcmp(current, "abs") == 0)
@@ -1152,7 +1152,7 @@ rewind:
 
         else if (strcmp(current, "dup") == 0) 
         {
-            push(peek());
+            push(copy(peek()));
         }
 
         else if (strcmp(current, "mod") == 0)
@@ -1165,17 +1165,17 @@ rewind:
             push(list());
         }
 
-        else if (strcmp(current, "++")   == 0)
-        {
-            push(new_unit(1));
-            push(sum());
-        }
-
-        else if (strcmp(current, "--")   == 0)
-        {
-            push(new_unit(-1));
-            push(sum());
-        }
+        // else if (strcmp(current, "++")   == 0)
+        // {
+        //     push(new_unit(1));
+        //     push(sum());
+        // }
+        //
+        // else if (strcmp(current, "--")   == 0)
+        // {
+        //     push(new_unit(-1));
+        //     push(sum());
+        // }
 
         else if (strcmp(current, "**")   == 0)
         {
@@ -1212,11 +1212,6 @@ rewind:
         {
             push(reverse());
         }
-
-        // else if (strcmp(current, "neg") == 0)
-        // {
-        //     push(negative());
-        // }
 
         else if (strcmp(current, "clr") == 0)
         {
@@ -1271,7 +1266,7 @@ rewind:
             goto rewind;
         }
 
-        else if (strcmp(current, ".") == 0)
+        else if (strcmp(current, "unb") == 0) // inutil?
         {
             value arr = pop();
             if (arr.type != array) {
@@ -1282,11 +1277,6 @@ rewind:
             for (int i = 0; i < arr.size; i++) {
                 push(coerce_const_to_unit(array_at(arr, i)));
             }
-        }
-
-        else if (strcmp(current, "swp") == 0)
-        {
-            swap();
         }
 
         else if (strcmp(current, "ld") == 0)
@@ -1451,91 +1441,27 @@ void print_stack_and_quit() {
 }
 
 
-// fica pra depois
-// value tokenize(char* input_path) {
-//     char* in;
-//     int size = read_file_to_string(input_path, &in);
-//
-//     value nest = new_nest();
-//
-//     for (int i = 0; i < size;) {
-//         char a = in[i], b = in[i+1];
-//
-//         if (a == ' ' || a == '\t' || a == '\r' || a == '\n') {
-//             i++;
-//             continue;
-//         }
-//         else if ((a == '(' && b == '(') || (a == ')' && b == ')')) {
-//             i += 2;
-//             continue;
-//         }
-//         else if (a == '(') {
-//             int parens = 1;
-//             int j = i+1;
-//             for (; j < size; j++) {
-//                 if (in[j] == '(') parens++;
-//                 if (in[j] == ')') parens--;
-//                 if (parens == 0) break;
-//             }
-//             if (j == size) {
-//                 fprintf(stderr, "error: unmatched comment!\n");
-//                 exit(1);
-//             }
-//             i = j;
-//             i++;
-//             continue;
-//         }
-//         else if (a == ')') {
-//             fprintf(stderr, "error: unrecognized token \')\'!\n");
-//             exit(1);
-//         }
-//         else if (a == '[' || a == ']') {
-//             nest_append(&nest, a == '[' ? "[" : "]");
-//             i++;
-//             continue;
-//         }
-//         else if (a == '"') {
-//             char* start = in + i;
-//             int j = i+1;
-//             for (; j < size; j++) {
-//                 if (in[j] == '\\' && in[j+1] == '"') {
-//                     j++;
-//                     continue;
-//                 }
-//                 if (in[j] == '"')
-//                     break;
-//             }
-//             if (j == size) {
-//                 fprintf(stderr, "error: unmatched string!\n");
-//                 exit(1);
-//             }
-//             int string_size = j - i - 1;
-//             char* buf = malloc(sizeof(char) * string_size + 1); 
-//             strncpy(buf, start, string_size);
-//             buf[string_size] = '\0';
-//
-//             nest_append(&nest, buf);
-//             free(buf);
-//             i = j;
-//             i++;
-//             continue;
-//         }
-//         else {
-//             printf("%c %c", a, b);
-//             int j = i;
-//             for (; j < size; j++) {
-//                 char c = in[j];
-//                 if (c == ' ' || c == '(' || c == ')' || c == '[' || c == ']')
-//                     break;
-//             }
-//             int string_size = (j - i);
-//             char* buf = malloc(sizeof(char) * string_size + 1);
-//             strncpy(buf, in + i, string_size);
-//         }
-//     }
-//     return nest;
-// }
+value tokenize(FILE* in) {
 
+    char buf[max_token_len];
+    value n = new_nest();
+
+    while (fscanf(in, "%255s", buf) == 1) {
+        token_count++;
+        nest_append(&n, buf);
+
+        if (token_count >= max_tokens) {
+            fprintf(
+                stderr, 
+                "error: max number of tokens has been achieved (%d)!\n",
+                max_tokens
+            );
+            exit(1);
+        }
+    }
+
+    return n;
+}
 
 int main(int argc, char** argv) {
 
@@ -1562,6 +1488,7 @@ int main(int argc, char** argv) {
         }
 
         else {
+
             fprintf(stderr, "error: unrecognized argument \"%s\"!\n", argv[i]);
             return 1;
         }
@@ -1577,30 +1504,25 @@ int main(int argc, char** argv) {
     if (!in) {
         fprintf(stderr, "error: can't open file \"%s\"\n", input_path);
         return 1;
+
     }
 
-
-    // tokenizer
-    char* current = tokens;
-    while (fscanf(in, "%255s", current) == 1) {
-        token_count++;
-        current += token_stride;
-
-        if (token_count >= max_tokens) {
-            fprintf(stderr, "error: max number of tokens has been achieved (%d)!\n", max_tokens);
-            exit(1);
-        }
-    }
 
     if (chdir(dirname(input_path)) == -1) {
         fprintf(stderr, "error: failed chaging directory\n");
         exit(1);
     }
 
+
+    FILE* std_in = fmemopen(std, std_len, "r");
+    value std_program = tokenize(std_in);
+    execute(std_program.data.nest, std_program.size);
+
+
+    value program = tokenize(in);
+
     // eval
-    execute(tokens, token_count);
-
-
+    execute(program.data.nest, program.size);
 
 
 

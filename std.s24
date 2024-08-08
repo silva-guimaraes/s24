@@ -1,0 +1,100 @@
+
+( s24 standard library )
+
+[ pp x fmt nl ] !-> dis
+
+( constants )
+[ 1 ] !-> true
+[ 0 ] !-> false
+[ 3.14159265359 ] !-> pi
+
+
+
+( swap )
+[ -> A -> B 
+    A B
+] !-> swp
+
+
+( increment & decrement )
+[ 1 + ] !-> ++
+[ 1 - ] !-> --
+
+
+( less than )
+[ - <0 ] !-> <
+
+
+
+( greater than )
+[ - >0 ] !-> >
+
+
+
+( equal or greater than )
+[ -> A -> B 
+    A B =
+    A B - <0
+    or
+] !-> >=
+
+
+
+( equal or less than )
+[ -> A -> B 
+    A B =
+    A B - >0
+    or
+] !-> <=
+
+
+
+( negative )
+[ 0 swp - ] !-> neg
+
+
+
+( and )
+[ not swp not or not ] !-> and
+
+
+
+( not equal )
+[ = not ] !-> !=
+
+
+
+( no operation )
+[ ] !-> nop
+
+
+( split whitespace ) 
+[ -> A 
+    0 a dup -> R -> B 
+    .loop
+    .over
+] !-> sws
+
+
+
+0 -> _iota
+[   
+    _iota 
+    dup ++ -> _iota 
+] !-> iota
+
+
+
+( last )
+[ # -- at ] !-> lst
+
+
+
+[ -> F -> H -> A -> B
+    A H x
+    B H x
+    F x
+] !-> cmb2
+
+
+( todo: limpar variaveis )
