@@ -18,8 +18,12 @@
 
 
 typedef enum {
-    value_null, constant, operation, nest, array, character
+    value_null, constant, operation, nest, array, character, string
 } value_type;
+
+char* type_string[] = {
+    "null", "constant", "operation", "nest", "array", "character", "string",
+};
 
 typedef struct value {
     value_type type;
@@ -48,27 +52,23 @@ void execute(char*, int);
 
 
 
-bool is_unit(value array) {
-    return array.size == 1;
-}
-
-bool is_unit_constant(value array) {
-    return array.size == 1 && array.data.array[0].type == constant;
-}
-
-bool is_constant(value array) {
+bool is_constant(value array)
+{
     return array.type == constant;
 }
 
-bool is_char(value array) {
+bool is_char(value array)
+{
     return array.type == character;
 }
 
-bool is_string(value array) {
-    return array.size > 0 && array.data.array[0].type == character;
+bool is_string(value array)
+{
+    return array.type == string;
 }
 
-char* get_string(value string) {
+char* get_string(value string)
+{
     assert(is_string(string));
 
     char* ret = malloc(sizeof(char) * string.size + 1);
@@ -82,7 +82,8 @@ char* get_string(value string) {
 #define max(x, y) x > y ? x : y
 #define min(x, y) x < y ? x : y
 
-char* get_string_slice(value string, int start, int end) {
+char* get_string_slice(value string, int start, int end)
+{
     assert(is_string(string));
     assert(end >= start);
 
@@ -98,22 +99,25 @@ char* get_string_slice(value string, int start, int end) {
     return ret;
 }
 
-bool is_array(value v) {
-    return v.type == array;
+bool is_array(value v)
+{
+    return v.type == array || v.type == string;
 }
 
-value array_at(value array, int at) {
+value array_at(value array, int at)
+{
     assert(is_array(array));
     assert(at >= 0 && at < array.size);
-    // assert(array.data.array[at].type == constant); // porque?
 
     return array.data.array[at];
 }
 
 // gracias gpt
-int read_file_to_string(const char *filename, char** out) {
+int read_file_to_string(const char *filename, char** out)
+{
     FILE* file = fopen(filename, "r");
-    if (file == NULL) {
+    if (file == NULL) 
+    {
         fprintf(stderr, "Failed to open file\n");
         exit(1);
     }
@@ -125,7 +129,8 @@ int read_file_to_string(const char *filename, char** out) {
 
     // Allocate memory for the file content
     char* buffer = malloc(fileSize + 1);
-    if (buffer == NULL) {
+    if (buffer == NULL) 
+    {
         fprintf(stderr, "Failed to allocate memory\n");
         fclose(file);
         exit(1);
@@ -133,7 +138,8 @@ int read_file_to_string(const char *filename, char** out) {
 
     // Read the file content into the buffer
     size_t bytesRead = fread(buffer, 1, fileSize, file);
-    if (bytesRead != fileSize) {
+    if (bytesRead != fileSize) 
+    {
         fprintf(stderr, "Failed to read file\n");
         free(buffer);
         fclose(file);
@@ -151,38 +157,40 @@ int read_file_to_string(const char *filename, char** out) {
 
 
 
-char* pretty_value(value v) {
+char* pretty_value(value v)
+{
     char* ret = malloc(sizeof(char) * 1000); // dane-se
-    switch (v.type) {
+    switch (v.type) 
+    {
         case character:
             sprintf(ret, "%c", v.data.c);
-            // sprintf(ret, " %d ", v.data.c);
             break;
         case constant:
-            sprintf(ret, fmodl(v.data.constant, 1) == 0 ? "%.0lf" : "%.2lf", v.data.constant);
+            sprintf(
+                ret, 
+                fmodl(v.data.constant, 1) == 0 ? "%.0lf" : "%.4lf",
+                v.data.constant
+            );
             break;
-        case array:
+        case string:
+            {
+                free(ret);
+                ret = malloc(sizeof(char) * v.size + 3);
+                ret[v.size] = '\0';
 
-            if (v.size > 0 && v.data.array[0].type == character) {
-                free(ret); // fixme
-                ret = malloc(sizeof(char) * v.size + 3); // fixme
-                ret[0] = '"';
-                for (int i = 0; i < v.size; i++){
-                    ret[i+1] = v.data.array[i].data.c;
-                }
-                ret[v.size + 1] = '"';
-                ret[v.size + 2] = '\0';
+                char* s = get_string(v);
+                sprintf(ret, "\"%s\"", s);
+                free(s);
+
                 return ret;
             }
-            if (is_unit_constant(v)) {
-                free(ret);
-                return pretty_value(array_at(v, 0));
-            }
-
+            break;
+        case array:
             ret[0] = '(';
             ret[1] = '(';
             ret[2] = '\0';
-            for (int i = 0; i < v.size; i++) {
+            for (int i = 0; i < v.size; i++) 
+            {
                 strcat(ret, " ");
                 strcat(ret, pretty_value(v.data.array[i]));
             }
@@ -191,7 +199,8 @@ char* pretty_value(value v) {
         case nest:
             ret[0] = '[';
             ret[1] = '\0';
-            for (int i = 0; i < v.size; i++) {
+            for (int i = 0; i < v.size; i++) 
+            {
                 strcat(ret, " ");
                 strcat(ret, v.data.nest + i * token_stride);
             }
@@ -204,45 +213,32 @@ char* pretty_value(value v) {
     return ret;
 }
 
-void print_pretty_value(value v) {
+void print_pretty_value(value v)
+{
     char* pp = pretty_value(v);
     printf("%s\n", pp);
     free(pp);
-    // fflush(stdout);
 }
 
-char* value_repr(value v) {
-    char* ret = malloc(sizeof(char) * 300);
-    switch (v.type) {
-        case constant:
-            sprintf(ret, "( constant ) %lf", v.data.constant);
-            break;
-        case array:
-            {
-                char* pp = pretty_value(v);
-                sprintf(ret, is_unit_constant(v) ? "( unit ) %s" : "( array ) %s", pp);
-                free(pp);
-            }
-            break;
-        case nest:
-            {
-                char* pp = pretty_value(v);
-                sprintf(ret, "( nest ) %s", pp);
-                free(pp);
-            }
-            break;
-        // case operation:
-        //     sprintf(ret, "( operation ) %d", v.data.operation);
-        //     break;
-        default:
-            assert(8 && "default?");
-            break;
-    }
+char* value_repr(value v)
+{
+
+    char* s = pretty_value(v);
+    int size = sizeof(char) * (strlen(type_string[v.type]) + strlen(s)) + 5 + 1;
+    char* ret = malloc(size);
+
+    ret[size-1] = '\0';
+
+    sprintf(ret, "( %s ) %s", type_string[v.type], s);
+    free(s);
+
     return ret;
 }
 
-void print_vars() {
-    for (int i = 0; i < var_count; i++) {
+void print_vars()
+{
+    for (int i = 0; i < var_count; i++) 
+    {
 
         char* value_string = value_repr(var_data[i]);
         printf("\"%s\": %s\n", var_names[i], value_string);
@@ -251,10 +247,14 @@ void print_vars() {
     }
 }
 
-void print_stack() {
-    int limit = stack_size < stack_print_limit ?  0 : stack_size - stack_print_limit;;
+void print_stack()
+{
+    int limit = stack_size < stack_print_limit 
+        ?  0 
+        : stack_size - stack_print_limit;
 
-    for (int i = stack_size-1; i >= limit; i--) {
+    for (int i = stack_size-1; i >= limit; i--) 
+    {
 
         value v = stack[i];
 
@@ -267,8 +267,10 @@ void print_stack() {
     }
 }
 
-void push(value v) {
-    if (stack_size >= max_stack) {
+void push(value v)
+{
+    if (stack_size >= max_stack) 
+    {
         fprintf(stderr, "error: max stack achieved (%d)!\n", max_stack);
         print_stack();
         exit(1);
@@ -276,49 +278,60 @@ void push(value v) {
     stack[stack_size++] = v;
 }
 
-value pop() {
-    if (stack_size <= 0) {
+value pop()
+{
+    if (stack_size <= 0) 
+    {
         fprintf(stderr, "error: ran out of stack! (%d)\n", stack_size);
         exit(1);
     }
     return stack[--stack_size];
 }
 
-value peek() {
-    if (stack_size <= 0) {
+value peek()
+{
+    if (stack_size <= 0) 
+    {
         fprintf(stderr, "error: ran out of stack! (%d)\n", stack_size);
         exit(1);
     }
     return stack[stack_size-1];
 }
 
-int find_var(char* token) {
+int find_var(char* token)
+{
     for (int i = 0; i < var_count; i++)
-        if (strcmp(token, var_names[i]) == 0) {
+        if (strcmp(token, var_names[i]) == 0) 
             return i;
-        }
     return -1; // not found
 }
 
-value new_character(char c) {
-    return (value) {
-        .type = character,
-        .data.c = c
-    };
+value new_character(char c)
+{
+    return (value) 
+        {
+            .type = character,
+            .data.c = c
+        };
 }
 
-value new_constant(double c) {
-    return (value) {
-        .type = constant,
-        .data.constant = c
-    };
+value new_constant(double c)
+{
+    return (value) 
+        {
+            .type = constant,
+            .data.constant = c
+        };
 }
 
-value string_to_constant(value string) {
+value string_to_constant(value v)
+{
+    assert(v.type == string);
     double number;
-    char* s = get_string(string);
-    if (sscanf(s, "%lf", &number) == 0) {
-        fprintf(stderr, "error: failure at converting number!\n");
+    char* s = get_string(v);
+    if (sscanf(s, "%lf", &number) == 0)
+    {
+        fprintf(stderr, "error: failure at converting string \"%s!\"\n", s);
         exit(1);
     }
     free(s);
@@ -326,13 +339,15 @@ value string_to_constant(value string) {
 }
 
 
-double get_constant(value c) {
+double get_constant(value c)
+{
     assert(c.type == constant);
 
     return c.data.constant;
 }
 
-value new_nest() {
+value new_nest()
+{
     return (value) { 
         .type = nest, 
         .data.nest = NULL,
@@ -340,7 +355,8 @@ value new_nest() {
     };
 }
 
-value new_array(int size) {
+value new_array(int size)
+{
     value new = (value) { 
         .type = array, 
         .data.array = malloc(sizeof(value) * size),
@@ -349,78 +365,77 @@ value new_array(int size) {
     return new;
 }
 
-void array_append(value* array, value x) {
+value new_string(int size)
+{
+    return (value) { 
+        .type = string, 
+        .data.array = malloc(sizeof(value) * size),
+        .size = size,
+    };
+}
+
+value from_string(char* s)
+{
+    int len = strlen(s);
+    value r = new_string(len);
+
+    for (int i = 0; i < r.size; i++)
+    {
+        r.data.array[i] = new_character(s[i]);
+    }
+    return r;
+}
+
+
+void array_append(value* array, value x) 
+{
     array->data.array = realloc(array->data.array , sizeof(value) * ++array->size);
     array->data.array[array->size-1] = x;
 }
 
-void nest_append(value* n, char* tok) {
+void nest_append(value* n, char* tok) 
+{
     assert(n->type == nest);
     n->data.nest = realloc(n->data.nest , max_token_len * ++n->size);
     strcpy(n->data.nest + (n->size-1)*token_stride, tok);
 }
 
-value new_unit(double c) {
-    value arr = new_array(0);
-    array_append(&arr, new_constant(c));
-    return arr;
-}
-
-value wrap_array(value v) {
+value wrap_array(value v) 
+{
     value a = new_array(1);
     a.data.array[0] = v;
     return a;
 }
 
 
-value copy(value v) {
-    if (v.type != array)
-        return v;
-
-    value new = new_array(v.size);
-
-    for (int i = 0; i < new.size; i++) {
-        new.data.array[i] = copy(array_at(v, i));
-    }
-
-    return new;
-}
-
-double get_unit(value array) {
-    assert(is_unit_constant(array));
-
-    return array.data.array[0].data.constant;
-}
-
-double get_unit_constant(value array) {
-    assert(is_unit_constant(array));
-
-    return array.data.array[0].data.constant;
-}
-
-value coerce_unit_to_const(value v)
+value copy(value v) 
 {
-    if (is_unit_constant(v))
-        return array_at(v, 0);
+    if (v.type == array || v.type == string) 
+    {
+
+        value new = new_array(v.size);
+        new.type = v.type;
+
+        for (int i = 0; i < new.size; i++) 
+        {
+            new.data.array[i] = copy(array_at(v, i));
+        }
+
+        return new;
+    }
 
     return v;
 }
 
-value coerce_const_to_unit(value c) {
-    if (c.type != constant)
-        return c;
-
-    value arr = new_array(0);
-    array_append(&arr, c);
-    return arr;
-}
-
-void free_value(value v) {
-    switch (v.type) {
+void free_value(value v) 
+{
+    switch (v.type) 
+    {
 
         case array:
 
-            for (int i = 0; i < v.size; i++) {
+            for (int i = 0; i < v.size; i++) 
+            {
                 free_value(v.data.array[i]);
             }
             free(v.data.array);
@@ -444,175 +459,213 @@ void free_value(value v) {
 
 // binary built-ins
 
-#define binary_iter(lvalue)                                 \
-bool map_val1 = !is_unit_constant(val1), map_val2 = !is_unit_constant(val2);  \
-int size = max(val1.size, val2.size);                       \
-value arr = new_array(size);                                \
-for (int i = 0; i < size; i++) {                            \
-    double result = lvalue;                                 \
-    arr.data.array[i] = new_constant(result);               \
+value coerce_to_array(value v) 
+{
+    if (v.type == array)
+        return v;
+
+    value r = new_array(1);
+    r.data.array[0] = v;
+    return r;
 }
 
-#define binary_map_op(op)                                   \
-binary_iter(                                                \
-        val1.data.array[map_val1 ? i : 0].data.constant     \
-        op                                                  \
-        val2.data.array[map_val2 ? i : 0].data.constant;    \
-)
+value binary_op(value val1, value val2, value (*func)(value,value)) 
+{
+    val1 = coerce_to_array(val1);
+    val2 = coerce_to_array(val2);
 
-#define binary_map_func(func)                               \
-binary_iter(                                                \
-func(                                                       \
-     val1.data.array[map_val1 ? i : 0].data.constant,       \
-     val2.data.array[map_val2 ? i : 0].data.constant)       \
-)
+    bool map_val1 = val1.size > 1, map_val2 = val2.size > 1; 
 
-#define array_iter(arr, idx, lvalue) \
-for (int i = 0; i < arr.size; i++) { \
-    arr.data.array[idx] = lvalue; \
-}
-
-value sum() {
-    value val1 = pop(), val2 = pop();
-    binary_map_op(+);
-    return arr;
-}
-
-value subtraction() {
-    value val2 = pop(), val1 = pop();
-    binary_map_op(-);
-    return arr;
-}
-
-value multiplication() {
-    value val1 = pop(), val2 = pop();
-    binary_map_op(*);
-    return arr;
-}
-
-value division() {
-    value val2 = pop(), val1 = pop();
-    binary_map_op(/);
-    return arr;
-}
-
-value power() {
-    value val2 = pop(), val1 = pop();
-    binary_map_func(powl);
-    return arr;
-}
-
-value mod() {
-    value val2 = pop(), val1 = pop();
-    binary_map_func(fmodl);
-    return arr;
-}
-
-value __equal(value v1, value v2) {
-
-    if (is_constant(v1) && is_constant(v2)) {
-        return new_constant(get_constant(v1) == get_constant(v2));
+    if (map_val1 && map_val2 && val1.size != val2.size) 
+    {
+        fprintf(
+            stderr, "error: size mismatch between %s and %s (%d x %d)!\n", 
+            value_repr(val1), value_repr(val2), val1.size, val2.size);
+        // exit() é o melhor free() de todos
+        exit(1);
     }
-    else if (is_char(v1) && is_char(v2)) {
-        return new_constant(v1.data.c == v2.data.c);
+
+    int size = max(val1.size, val2.size);
+    value arr = new_array(size);
+    for (int i = 0; i < size; i++) 
+    {
+        arr.data.array[i] = func(
+            val1.data.array[map_val1 ? i : 0],
+            val2.data.array[map_val2 ? i : 0]
+        );
     }
-    else if (is_string(v1) && is_string(v2)) {
-        if (v1.size != v2.size) 
+    if (size == 1)
+        return array_at(arr, 0);
+    else
+        return arr;
+}
+
+#define binary_op_type_handling(name, \
+constant_handling, character_handling, string_handling) \
+value name(value a, value b) { \
+    if (is_constant(a) && is_constant(b)) { \
+        return new_constant(constant_handling); \
+    } \
+    else if (is_char(a) && is_char(b)) { \
+        character_handling; \
+    } \
+    else if (is_string(a) && is_string(b)) { \
+        string_handling \
+    } \
+    if (is_constant(a) && is_string(b)) { \
+        return name(a, string_to_constant(b)); \
+    } \
+    else if (is_string(a) && is_constant(b)) { \
+        return name(string_to_constant(a), b); \
+    } \
+    if (is_array(a) || is_array(b)) { \
+        return binary_op(a, b, name); \
+    } \
+    assert(false); \
+}
+
+#define binary_type_handler_op_not_defined_error(operation, handler) \
+fprintf( \
+        stderr, \
+        "error: %s operation between %ss not defined!\n", \
+        operation, handler); \
+exit(1); \
+
+
+binary_op_type_handling(
+    __sum, 
+    get_constant(a) + get_constant(b),
+    {
+        return new_character(a.data.c + b.data.c);
+    },
+    {
+        value n = copy(a);
+        for (int i = 0; i < b.size; i++) 
+        {
+            array_append(&n, array_at(b, i));
+        }
+        return n;
+    }
+);
+
+value sum()
+{
+    return binary_op(pop(), pop(), __sum);
+}
+
+binary_op_type_handling(
+    __sub, 
+    get_constant(a) - get_constant(b),
+    {
+        return new_character(a.data.c - b.data.c);
+    },
+    binary_type_handler_op_not_defined_error("subtraction", "string")
+);
+
+
+value subtraction()
+{
+    value subtrahend = pop(), minuend = pop();
+    return binary_op(minuend, subtrahend, __sub);
+}
+
+binary_op_type_handling(
+    __mul, 
+    get_constant(a) * get_constant(b),
+    {
+        return new_character(a.data.c * b.data.c);
+    },
+    binary_type_handler_op_not_defined_error("multiplication", "string")
+);
+
+value multiplication()
+{
+    return binary_op(pop(), pop(), __mul);
+}
+
+binary_op_type_handling(
+    __div, 
+    a.data.constant / b.data.constant,
+    {
+        return new_character(a.data.c * b.data.c);
+    },
+    {
+        return __sum(__sum(a, from_string("/")), b);
+    }
+);
+
+
+value division()
+{
+    value divisor = pop(), dividend = pop();
+    return binary_op(dividend, divisor, __div);
+}
+
+binary_op_type_handling(
+    ___pow, 
+    pow(a.data.constant, b.data.constant),
+    binary_type_handler_op_not_defined_error("power", "character"),
+    binary_type_handler_op_not_defined_error("power", "string")
+);
+
+value power()
+{
+    value exponent = pop(), base = pop();
+    return binary_op(base, exponent, ___pow);
+}
+
+binary_op_type_handling(
+    __mod, 
+    fmodl(a.data.constant, b.data.constant),
+    binary_type_handler_op_not_defined_error("modulo", "character"),
+    binary_type_handler_op_not_defined_error("modulo", "string")
+);
+
+value mod() 
+{
+    value divisor = pop(), dividend = pop();
+    return binary_op(dividend, divisor, __mod);
+}
+
+binary_op_type_handling(
+    __equal, 
+    a.data.constant == b.data.constant,
+    {
+        return new_constant(a.data.c == b.data.c);
+    },
+    {
+        if (a.size != a.size) 
             return new_constant(false);
 
-        for (int i = 0; i < v1.size; i++) {
-            if (array_at(v1, i).data.c != array_at(v2, i).data.c) {
+        for (int i = 0; i < a.size; i++) 
+        {
+            if (array_at(a, i).data.c != array_at(b, i).data.c) 
+            {
                 return new_constant(false);
             }
         }
         return new_constant(true);
     }
 
-    if (is_constant(v1) && is_string(v2)) {
-        return __equal(v1, string_to_constant(v2));
-    }
-    else if (is_string(v1) && is_constant(v2)) {
-        return __equal(string_to_constant(v1), v2);
-    }
+);
 
-    fprintf(stderr, "error: anything but here!\n");
-    exit(1);
+value equal() 
+{
+    return binary_op(pop(), pop(), __equal);
 }
 
-#define def_binary_op2(name, func)\
-value name() { \
-    value val1 = pop(), val2 = pop(); \
-    bool map_val1 = !is_unit(val1), map_val2 = !is_unit(val2); \
-    int size = max(val1.size, val2.size); \
-    value arr = new_array(size); \
-    for (int i = 0; i < size; i++) { \
-        arr.data.array[i] = func( \
-            array_at(val1, map_val1 ? i : 0), \
-            array_at(val2, map_val2 ? i : 0) \
-        ); \
-    } \
-    return arr; \
+binary_op_type_handling(
+    __or, 
+    a.data.constant || b.data.constant,
+    binary_type_handler_op_not_defined_error("or", "character"),
+    binary_type_handler_op_not_defined_error("or", "string")
+);
+
+
+value or() 
+{
+    return binary_op(pop(), pop(), __or);
 }
-
-// value equal() {
-//     value val1 = pop(), val2 = pop();
-//
-//     bool map_val1 = !is_unit(val1), map_val2 = !is_unit(val2);
-//     int size = max(val1.size, val2.size);
-//     value arr = new_array(size);
-//
-//     for (int i = 0; i < size; i++) {
-//         
-//         arr.data.array[i] = __equal(
-//             array_at(val1, map_val1 ? i : 0),
-//             array_at(val2, map_val2 ? i : 0)
-//         );
-//     }
-//
-//     return arr;
-// }
-
-value __or(value v1, value v2) {
-
-    if (is_constant(v1) && is_constant(v2)) {
-        return new_constant(get_constant(v1) || get_constant(v2));
-    }
-    else if (is_char(v1) && is_char(v2)) {
-        return new_constant(v1.data.c || v2.data.c);
-    }
-    if (is_constant(v1) && is_string(v2)) {
-        return __equal(v1, string_to_constant(v2));
-    }
-    else if (is_string(v1) && is_constant(v2)) {
-        return __equal(string_to_constant(v1), v2);
-    }
-
-    return new_constant(true);
-}
-
-// value or() {
-//     value val1 = pop(), val2 = pop();
-//
-//     bool map_val1 = !is_unit(val1), map_val2 = !is_unit(val2);
-//     int size = max(val1.size, val2.size);
-//     value arr = new_array(size);
-//
-//     for (int i = 0; i < size; i++) {
-//         
-//         arr.data.array[i] = __or(
-//             array_at(val1, map_val1 ? i : 0),
-//             array_at(val2, map_val2 ? i : 0)
-//         );
-//     }
-//
-//     return arr;
-// }
-
-def_binary_op2(equal, __equal);
-def_binary_op2(or, __or);
-
-
-
 
 
 
@@ -622,114 +675,227 @@ def_binary_op2(or, __or);
 
 // unary built-ins
 
-#define unary_iter(lvalue)                    \
-int size = val.size;                          \
-value arr = new_array(size);                  \
-for (int i = 0; i < size; i++) {              \
-    double result = lvalue;                   \
-    arr.data.array[i] = new_constant(result); \
+value unary_op(value v, value (*func)(value)) 
+{
+    v = coerce_to_array(v);
+
+    int size = v.size;
+    value arr = new_array(size);
+
+    for (int i = 0; i < size; i++) 
+        arr.data.array[i] = func(v.data.array[i]);
+
+    if (size == 1)
+        return array_at(arr, 0);
+    else
+        return arr;
 }
 
-#define unary_map_func(func)            \
-unary_iter(                             \
-func(val.data.array[i].data.constant)   \
+#define unary_type_handler_op_not_defined_error(operation, handler) \
+fprintf( \
+        stderr, \
+        "error: %s operation for %ss not defined!\n", \
+        operation, handler); \
+exit(1);
+
+#define unary_op_type_handling(name, \
+constant_handling, character_handling, string_handling) \
+value name(value v) { \
+    switch (v.type) { \
+        case constant: \
+            constant_handling; \
+            break; \
+        case character: \
+            character_handling; \
+            break; \
+        case string: \
+            string_handling; \
+            break; \
+        case array: \
+            return unary_op(v, name); \
+            break; \
+        default: \
+            assert(false); \
+            break; \
+    } \
+    assert(false); \
+}
+
+unary_op_type_handling(
+    _is_prime, 
+    {
+        int x = get_constant(v);
+        if (x <= 1)
+            return new_constant(false);
+
+        double sqroot = sqrtl(x);
+        bool is_prime = true;
+
+        for (double i = 2; i <= sqroot; i++) 
+            if (fmodl(x, i) == 0) 
+            {
+                is_prime = false;
+                break;
+            }
+
+        return new_constant(is_prime);
+    },
+    {
+        return _is_prime(new_constant(v.data.c));
+    },
+    {
+        return _is_prime(string_to_constant(v));
+    }
 )
 
-#define def_simple_unary_func_op(name, func) \
-value name() {            \
-    value val = pop();      \
-    unary_map_func(func); \
-    return arr;             \
-}
-
-double __is_prime(double x) {
-    if (x <= 1)
-        return false;
-    double sqroot = sqrtl(x);
-    bool is_prime = true;
-    for (double i = 2; i <= sqroot; i++) {
-        if (fmodl(x, i) == 0) {
-            is_prime = false;
-            break;
-        }
+unary_op_type_handling(
+    _gt0, 
+    {
+        return new_constant(v.data.constant > 0);
+    },
+    {
+        return _gt0(new_constant(v.data.c));
+    }, 
+    {
+        return _gt0(string_to_constant(v));
     }
-    return is_prime;
-}
-double __gt0(double x) { return x > 0; }
-double __lt0(double x) { return x < 0; }
-double __not(double x) { return !x; }
+)
 
-def_simple_unary_func_op(   _round,         roundl  );
-def_simple_unary_func_op(    is_prime,    __is_prime);
-def_simple_unary_func_op(   _abs,           fabsl   );
-def_simple_unary_func_op(   _cos,           cos     );
-def_simple_unary_func_op(   _sin,           sin     );
-def_simple_unary_func_op(    gt0,         __gt0     );
-def_simple_unary_func_op(    lt0,         __lt0     );
-def_simple_unary_func_op(    not,         __not     );
+value  gt0()
+{
+    return unary_op(pop(), _gt0);
+}
+
+unary_op_type_handling(
+    _lt0, 
+    {
+        return new_constant(v.data.constant < 0);
+    },
+    {
+        return _gt0(new_constant(v.data.c));
+    }, 
+    {
+        return _gt0(string_to_constant(v));
+    }
+)
+
+value  lt0()
+{
+    return unary_op(pop(), _lt0);
+}
+
+unary_op_type_handling(
+    _not, 
+    {
+        return new_constant(!v.data.constant);
+    },
+    {
+        return _gt0(new_constant(v.data.c));
+    }, 
+    {
+        return _gt0(string_to_constant(v));
+    }
+)
+
+value  not()
+{
+    return unary_op(pop(), _not);
+}
+
+value is_prime()
+{
+    return unary_op(pop(), _is_prime);
+}
+
+value _round()
+{
+    fprintf(stderr, "not implmemented yet");
+    exit(1);
+}
+
+value _abs()
+{
+    fprintf(stderr, "not implmemented yet");
+    exit(1);
+}
+
+value _cos()
+{
+    fprintf(stderr, "not implmemented yet");
+    exit(1);
+}
+
+value _sin()
+{
+    fprintf(stderr, "not implmemented yet");
+    exit(1);
+}
+
 
 // special
 
 
-value list() {
+value list() 
+{
     value take = pop();
-    int size = get_unit(take);
+    int size = get_constant(take);
+    size = size == -1 ? stack_size : size;
 
-    value arr = new_array(size == -1 ? stack_size : size);
+    value arr = new_array(size);
 
-    array_iter(
-        arr, 
-        arr.size - i - 1,
-        coerce_unit_to_const(pop())
-    );
+    for (int i = 0; i < size; i++) 
+    {
+        arr.data.array[size - i - 1] = pop();
+    }
 
     return arr;
 }
-void clear() {
+void clear() 
+{
     int ss = stack_size;
     for (int i = 0; i < ss; i++)
         pop();
 }
 
-value range() {
-    value to = pop(), from = pop();
+// todo: pra std
+// value range() {
+//     value to = pop(), from = pop();
+//
+//     int size = get_constant(to) - get_constant(from);
+//
+//     value arr = new_array(size);
+//
+//     for (int i = 0; i < size; i++) {
+//         arr.data.array[i] = new_constant(get_constant(from) + i);
+//     }
+//
+//     return arr;
+// }
 
-    int size = get_unit(to) - get_unit(from);
+// todo: pra std
+// value range1() {
+//     value to = pop();
+//     int size = get_unit(to);
+//     value arr = new_array(size);
+//     array_iter(arr, i, new_constant(i))
+//     return arr;
+// }
 
-    value arr = new_array(size);
-
-    array_iter(arr, i, new_constant(get_unit(from) + i));
-
-    return arr;
-}
-
-value range1() {
-    value to = pop();
-    int size = get_unit(to);
-    value arr = new_array(size);
-
-    array_iter(arr, i, new_constant(i))
-
-    return arr;
-}
-
-void swap() {
-    value first = pop(), second = pop();
-    push(first);
-    push(second);
-}
-
-value mask() {
+value mask() 
+{
     value mask = pop(), filter = pop();
 
-    if (mask.size != filter.size) {
+    if (mask.size != filter.size) 
+    {
         fprintf(stderr, "error: mask and array have different sizes!\n");
         exit(1);
     }
     value arr = new_array(0);
-    for (int i = 0; i < mask.size; i++) {
+    for (int i = 0; i < mask.size; i++) 
+    {
 
-        if (get_constant(array_at(mask, i)) == 1.0) {
+        if (get_constant(array_at(mask, i)) == 1.0) 
+        {
             array_append(&arr, array_at(filter, i));
         }
     }
@@ -737,13 +903,16 @@ value mask() {
     return arr;
 }
 
-value _index() {
+value _index() 
+{
     value mask = pop();
 
     value arr = new_array(0);
-    for (int i = 0; i < mask.size; i++) {
+    for (int i = 0; i < mask.size; i++) 
+    {
 
-        if (get_constant(array_at(mask, i)) == 1.0) {
+        if (get_constant(array_at(mask, i)) == 1.0) 
+        {
             array_append(&arr, new_constant(i));
         }
     }
@@ -751,12 +920,14 @@ value _index() {
     return arr;
 }
 
-value _index2() {
+value _index2() 
+{
     value to_search = pop(), list = pop();
 
     value arr = new_array(0);
 
-    for (int i = 0; i < to_search.size; i++) {
+    for (int i = 0; i < to_search.size; i++) 
+    {
 
         bool found = false;
         for (int j = 0; j < list.size; j++)  {
@@ -774,7 +945,8 @@ value _index2() {
     return arr;
 }
 
-value reverse() {
+value reverse() 
+{
     value arr = pop(), new = new_array(arr.size);
 
     assert(arr.type == array);
@@ -786,50 +958,59 @@ value reverse() {
     return new;
 }
 
-value at() {
+value at() 
+{
     value at = pop(), arr = pop();
-    return array_at(arr, get_unit(at));
+    return array_at(arr, get_constant(at));
 }
 
-void reduce_left() {
+void reduce_left() 
+{
     value nested_op = pop(), arr = pop();
 
-    if (nested_op.type != nest) {
+    if (nested_op.type != nest) 
+    {
         fprintf(stderr, "error: can only apply nested operations to arrays!!\n");
         print_pretty_value(nested_op);
         exit(1);
     }
-    if (arr.type != array) {
+    if (arr.type != array) 
+    {
         fprintf(stderr, "error: can't reduce what's not an array!\n");
         print_pretty_value(arr);
         exit(1);
     }
 
-    push(coerce_const_to_unit(array_at(arr, 0)));
-    for (int i = 1; i < arr.size; i++) {
-        push(coerce_const_to_unit(array_at(arr, i)));
+    push(array_at(arr, 0));
+    for (int i = 1; i < arr.size; i++) 
+    {
+        push(array_at(arr, i));
         execute(nested_op.data.nest, nested_op.size);
     }
 }
 
-value accumulate_left() {
+value accumulate_left() 
+{
     value nested_op = pop(), arr = pop();
 
-    if (nested_op.type != nest) {
+    if (nested_op.type != nest) 
+    {
         fprintf(stderr, "error: can only apply nested operations to arrays!!\n");
         print_pretty_value(nested_op);
         exit(1);
     }
-    if (arr.type != array) {
+    if (arr.type != array) 
+    {
         fprintf(stderr, "error: can't reduce what's not an array!\n");
         print_pretty_value(arr);
         exit(1);
     }
 
     value acc = new_array(0);
-    push(coerce_const_to_unit(array_at(arr, 0)));
-    for (int i = 1; i < arr.size; i++) {
-        push(coerce_const_to_unit(array_at(arr, i)));
+    push(array_at(arr, 0));
+    for (int i = 1; i < arr.size; i++) 
+    {
+        push(array_at(arr, i));
         execute(nested_op.data.nest, nested_op.size);
         array_append(&acc, peek());
     }
@@ -841,7 +1022,8 @@ value accumulate_left() {
 
 
 
-void execute(char* start, int amount) {
+void execute(char* start, int amount) 
+{
     char* last;
     int parens;
 
@@ -849,21 +1031,26 @@ rewind:
     last = start + amount*token_stride;
     parens = 0;
 
-    for (char* current = start; current < last; current += token_stride) {
+    for (char* current = start; current < last; current += token_stride) 
+    {
 
 
-        if (strcmp(current, "((" /*))*/) == 0 || strcmp(current, /*((*/"))") == 0) {
+        if (strcmp(current, "((" /*))*/) == 0 || strcmp(current, /*((*/"))") == 0) 
+        {
             continue;
         }
 
-        if (strcmp(current, "(" /*)*/) == 0) {
+        if (strcmp(current, "(" /*)*/) == 0) 
+        {
             parens++;
             continue;
         }
-        if (strcmp(current,  /*(*/")") == 0) {
-            if (parens == 0) {
+        if (strcmp(current,  /*(*/")") == 0) 
+        {
+            if (parens == 0) 
+            {
                 fprintf(stderr, "error: parens mismatch!\n");
-            exit(1);
+                exit(1);
             }
             parens--;
             continue;
@@ -871,41 +1058,45 @@ rewind:
         if (parens > 0) 
             continue;
 
-        if (parens < 0)  {
+        if (parens < 0) 
+        {
             fprintf(stderr, "error: parens mismatch!\n");
             exit(1);
         }
 
-        if (*current == '"') {
+        if (*current == '"') 
+        {
 
-            value string = new_array(0);
+            value string = new_string(0);
 
             char* i = current + 1;
             char* t = current;
 
-            for (; i < last; i++) {
-
-                if (*i == '\0' || (*i == '\\' && *(i+1) == '\0')){
+            for (; i < last; i++) 
+            {
+                if (*i == '\0' || (*i == '\\' && *(i+1) == '\0'))
+                {
                     array_append(&string, new_character(' '));
                     t += token_stride;
                     i = t-1;
                 }
-                else if (*i == '"'){
+                else if (*i == '"')
+                {
                     assert(i == t + strlen(t) - 1);
                     break;
-                } else {
+                }
+                else {
                     array_append(&string, new_character(*i));
                 }
             }
-            // unit string?
-            value r = new_array(0);
-            array_append(&r, string);
-            push(r);
+
+            push(string);
             current = t;
             continue;
         }
 
-        if (strcmp(current, "[" /*]*/) == 0) {
+        if (strcmp(current, "[" /*]*/) == 0) 
+        {
             value new_nest = (value) { 
                 .type = nest,
                 .data.nest = NULL,
@@ -913,11 +1104,14 @@ rewind:
             };
             int brackets = 1;
             char* i = current + token_stride;
-            for (; i < last; i += max_token_len) {
-                if (strcmp(i, "[" /*]*/ ) == 0) {
+            for (; i < last; i += max_token_len) 
+            {
+                if (strcmp(i, "[" /*]*/ ) == 0) 
+                {
                     brackets++;
                 }
-                if (strcmp(i, /*[*/ "]") == 0) {
+                if (strcmp(i, /*[*/ "]") == 0) 
+                {
                     brackets--;
                 }
                 if (brackets == 0)
@@ -926,7 +1120,8 @@ rewind:
                 new_nest.data.nest = realloc(new_nest.data.nest , max_token_len * ++new_nest.size);
                 strcpy(new_nest.data.nest + (new_nest.size-1)*token_stride, i);
             }
-            if (i == last) {
+            if (i == last) 
+            {
                 fprintf(stderr, "error: unmatched nesting!\n");
                 exit(1);
             }
@@ -939,22 +1134,14 @@ rewind:
 
 
         double number;
-        if (sscanf(current, "%lf", &number) == 1) {
-            value new_array = (value) { 
-                .type = array, 
-                .data.array = malloc(sizeof(value)),
-                .size = 1,
-
-            };
-            new_array.data.array[0] = (value) {
-                .type = constant,
-                .data.constant = number,
-            };
-            push(new_array);
+        if (sscanf(current, "%lf", &number) == 1) 
+        {
+            push(new_constant(number));
             continue;
         }
 
-        if (current[0] == '.') {
+        if (current[0] == '.') 
+        {
             continue;
         }
 
@@ -1026,21 +1213,25 @@ rewind:
         {
             value check = pop();
 
-            if (get_unit_constant(check)) {
+            if (get_constant(check)) 
+            {
                 char* goto_label = current += token_stride;
 
                 if (goto_label[0] != '.')
                     continue;
 
-                if (goto_label[0] == '.' && strlen(goto_label) == 1) {
+                if (goto_label[0] == '.' && strlen(goto_label) == 1) 
+                {
                     fprintf(stderr, "error: goto label \"%s\" is not a label!\n", goto_label);
                     exit(1);
                 }
 
-                for (char* i = start; i < last; i += token_stride) {
+                for (char* i = start; i < last; i += token_stride) 
+                {
                     if (i[0] != '.')
                         continue;
-                    if (i != goto_label && strcmp(goto_label, i) == 0) {
+                    if (i != goto_label && strcmp(goto_label, i) == 0) 
+                    {
                         current = i;
                         goto force_continue;
                     }
@@ -1052,20 +1243,24 @@ rewind:
             else {
                 char* else_label = current + token_stride*2;
 
-                if (else_label[0] != '.') {
+                if (else_label[0] != '.') 
+                {
                     current += token_stride;
                     continue;
                 }
 
-                if (else_label[0] == '.' && strlen(else_label) == 1) {
+                if (else_label[0] == '.' && strlen(else_label) == 1) 
+                {
                     fprintf(stderr, "error: goto label \"%s\" is not a label!\n", else_label);
                     exit(1);
                 }
 
-                for (char* i = start; i < last; i += token_stride) {
+                for (char* i = start; i < last; i += token_stride) 
+                {
                     if (i[0] != '.')
                         continue;
-                    if (i != else_label && strcmp(else_label, i) == 0) {
+                    if (i != else_label && strcmp(else_label, i) == 0) 
+                    {
                         current = i;
                         goto force_continue;
                     }
@@ -1076,10 +1271,13 @@ rewind:
             }
         }
 
-        else if (strcmp(current, ";") == 0) {
-            for (char* i = current; i < last; i += token_stride) {
+        else if (strcmp(current, ";") == 0) 
+        {
+            for (char* i = current; i < last; i += token_stride) 
+            {
                 // printf("op: %s cmp: %d\n", i, strcmp(i, ".end"));
-                if (strcmp(i, ".end") == 0) {
+                if (strcmp(i, ".end") == 0) 
+                {
                     current = i;
                     goto force_continue;
                 }
@@ -1101,7 +1299,7 @@ rewind:
 
         else if (strcmp(current, "#") == 0)
         {
-            push(new_unit(peek().size));
+            push(new_constant(peek().size));
         }
 
         else if (strcmp(current, "at") == 0)
@@ -1223,20 +1421,21 @@ rewind:
             push(is_prime());
         }
 
-        else if (strcmp(current, "ran") == 0)
-        {
-            push(range());
-        }
+        // else if (strcmp(current, "ran") == 0)
+        // {
+        //     push(range());
+        // }
 
-        else if (strcmp(current, "ran1") == 0)
-        {
-            push(range1());
-        }
+        // else if (strcmp(current, "ran1") == 0)
+        // {
+        //     push(range1());
+        // }
 
         else if (strcmp(current, "x") == 0)
         {
             value nesting = pop();
-            if (nesting.type != nest) {
+            if (nesting.type != nest) 
+            {
                 fprintf(stderr, "error: can't execute what is not a nest!\n");
                 print_pretty_value(nesting);
                 exit(1);
@@ -1247,13 +1446,15 @@ rewind:
         else if (strcmp(current, "rx") == 0)
         {
             value nesting = pop();
-            if (nesting.type != nest) {
+            if (nesting.type != nest) 
+            {
                 fprintf(stderr, "error: can't execute what is not a nest!\n");
                 print_pretty_value(nesting);
                 exit(1);
             }
 
-            if (nesting.data.nest != start) {
+            if (nesting.data.nest != start) 
+            {
                 fprintf(stderr, "error: can't rewind a nest outside of itself! "
                         "try using the 'x' command!\n");
                 print_pretty_value(nesting);
@@ -1269,13 +1470,15 @@ rewind:
         else if (strcmp(current, "unb") == 0) // inutil?
         {
             value arr = pop();
-            if (arr.type != array) {
+            if (arr.type != array) 
+            {
                 fprintf(stderr, "error: can't unbind what is not an array!\n");
                 print_pretty_value(arr);
                 exit(1);
             }
-            for (int i = 0; i < arr.size; i++) {
-                push(coerce_const_to_unit(array_at(arr, i)));
+            for (int i = 0; i < arr.size; i++) 
+            {
+                push(array_at(arr, i));
             }
         }
 
@@ -1286,7 +1489,8 @@ rewind:
             string = array_at(string, 0); // fixme
 
             char* builder = malloc(sizeof(char) * string.size + 1);
-            for (int i = 0; i < string.size; i++) {
+            for (int i = 0; i < string.size; i++) 
+            {
                 builder[i] = array_at(string, i).data.c;
             }
             builder[string.size] = '\0';
@@ -1296,7 +1500,8 @@ rewind:
 
             value new_string = new_array(0);
 
-            for (int i = 0; i < file_size; i++) {
+            for (int i = 0; i < file_size; i++) 
+            {
                 array_append(&new_string, new_character(file[i]));
             }
 
@@ -1310,9 +1515,11 @@ rewind:
             value r = new_array(0);
             value b = new_array(0);
 
-            for (int i = 0; i < string.size; i++) {
+            for (int i = 0; i < string.size; i++) 
+            {
                 value at = array_at(string, i);
-                switch (at.data.c) {
+                switch (at.data.c) 
+                {
                     case ' ':
                     case '\n':
                     case '\t':
@@ -1343,9 +1550,11 @@ rewind:
             value r = new_array(0);
             value b = new_array(0);
 
-            for (int i = 0; i < string.size; i++) {
+            for (int i = 0; i < string.size; i++) 
+            {
                 char* s = get_string_slice(string, i, i+delimiter_len);
-                if (strcmp(s, delimiter) == 0) {
+                if (strcmp(s, delimiter) == 0) 
+                {
 
                 }
                 free(s);
@@ -1360,7 +1569,8 @@ rewind:
         else if (strcmp(current, "a2n") == 0)
         {
             value arr = pop();
-            if (is_string(arr)) {
+            if (is_string(arr)) 
+            {
                 value n = new_array(0);
                 array_append(&n, arr);
                 arr = n;
@@ -1368,11 +1578,13 @@ rewind:
 
             value r = new_array(0);
 
-            for (int i = 0; i < arr.size; i++) {
+            for (int i = 0; i < arr.size; i++) 
+            {
 
                 double number;
                 char* s = get_string(array_at(arr, i));
-                if (sscanf(s, "%lf", &number) == 0) {
+                if (sscanf(s, "%lf", &number) == 0) 
+                {
                     fprintf(stderr, "error: failure at converting number!\n");
                     exit(1);
                 }
@@ -1405,14 +1617,16 @@ rewind:
 
         else {
             int idx;
-            if ((idx = find_var(current)) < 0) {
+            if ((idx = find_var(current)) < 0) 
+            {
                 fprintf(stderr, "error: unrecognized token: \"%s\"!\n", current);
-                fprintf(stderr, "available variables:\n");
-                print_vars();
+                // fprintf(stderr, "available variables:\n");
+                // print_vars();
                 exit(1);
             }
             value v = var_data[idx];
-            if (v.type == nest && v.auto_exec) {
+            if (v.type == nest && v.auto_exec) 
+            {
                 execute(v.data.nest, v.size);
                 continue;
             }
@@ -1425,13 +1639,15 @@ rewind:
     }
 }
 
-void print_usage() {
+void print_usage() 
+{
     printf("usage: s24 [options] input-file\n\n"
            "options:\n"
            "   -h, --help\tprint this help text and exit\n");
 }
 
-void print_stack_and_quit() {
+void print_stack_and_quit() 
+{
     fflush(stdout);
     fflush(stderr);
 
@@ -1441,35 +1657,27 @@ void print_stack_and_quit() {
 }
 
 
-value tokenize(FILE* in) {
+value tokenize(FILE* in) 
+{
 
     char buf[max_token_len];
     value n = new_nest();
 
-    while (fscanf(in, "%255s", buf) == 1) {
-        token_count++;
+    while (fscanf(in, "%255s", buf) == 1) 
         nest_append(&n, buf);
-
-        if (token_count >= max_tokens) {
-            fprintf(
-                stderr, 
-                "error: max number of tokens has been achieved (%d)!\n",
-                max_tokens
-            );
-            exit(1);
-        }
-    }
 
     return n;
 }
 
-int main(int argc, char** argv) {
+int main(int argc, char** argv) 
+{
 
     signal(SIGINT, print_stack_and_quit);
 
     // input
     char* input_path = NULL;
-    for (int i = 1; i < argc; i++) {
+    for (int i = 1; i < argc; i++) 
+    {
         if (strcmp(argv[i], "--help") == 0 || strcmp(argv[i], "--help") == 0)
         {
             print_usage();
@@ -1494,21 +1702,24 @@ int main(int argc, char** argv) {
         }
     }
 
-    if (!input_path) {
+    if (!input_path) 
+    {
         fprintf(stderr, "error: missing input file.\n");
         print_usage();
         return 1;
     }
 
     FILE* in = fopen(input_path, "r");
-    if (!in) {
+    if (!in) 
+    {
         fprintf(stderr, "error: can't open file \"%s\"\n", input_path);
         return 1;
 
     }
 
 
-    if (chdir(dirname(input_path)) == -1) {
+    if (chdir(dirname(input_path)) == -1) 
+    {
         fprintf(stderr, "error: failed chaging directory\n");
         exit(1);
     }
@@ -1527,12 +1738,14 @@ int main(int argc, char** argv) {
 
 
     // output
-    if (stack_size > 1) {
+    if (stack_size > 1) 
+    {
         fprintf(stderr, "error: stack remaining!\n");
         print_stack();
         return 1;
     }
-    else if (stack_size == 0) {
+    else if (stack_size == 0) 
+    {
         return 0;
     }
 
@@ -1545,5 +1758,11 @@ int main(int argc, char** argv) {
     }
 
     print_pretty_value(last);
+
+
+    free_value(program);
+    free_value(std_program);
+
+
     return 0;
 }

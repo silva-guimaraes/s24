@@ -24,12 +24,8 @@
 ( less than )
 [ - <0 ] !-> <
 
-
-
 ( greater than )
 [ - >0 ] !-> >
-
-
 
 ( equal or greater than )
 [ -> A -> B 
@@ -37,8 +33,6 @@
     A B - <0
     or
 ] !-> >=
-
-
 
 ( equal or less than )
 [ -> A -> B 
@@ -52,28 +46,20 @@
 ( negative )
 [ 0 swp - ] !-> neg
 
-
-
 ( and )
 [ not swp not or not ] !-> and
 
-
-
 ( not equal )
 [ = not ] !-> !=
+
+( all & any )
+[ [ and ] rdl ] !-> all
+[ [ or ] rdl ] !-> any
 
 
 
 ( no operation )
 [ ] !-> nop
-
-
-( split whitespace ) 
-[ -> A 
-    0 a dup -> R -> B 
-    .loop
-    .over
-] !-> sws
 
 
 
@@ -88,6 +74,10 @@
 ( last )
 [ # -- at ] !-> lst
 
+( nest to array )
+[ # -> A 
+    x A a
+] !-> arr
 
 
 [ -> F -> H -> A -> B
@@ -95,6 +85,5 @@
     B H x
     F x
 ] !-> cmb2
-
 
 ( todo: limpar variaveis )
