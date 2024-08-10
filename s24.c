@@ -154,85 +154,126 @@ int read_file_to_string(const char *filename, char** out)
     return fileSize;
 }
 
-
-
-
-char* pretty_value(value v)
+int tally(value arr)
 {
-    char* ret = malloc(sizeof(char) * 1000); // dane-se
+    if (is_array(arr))
+    {
+        int sum = 0;
+        for (int i = 0; i < arr.size; i++)
+            sum += tally(array_at(arr, i));
+        return sum;
+    }
+    return 1;
+}
+
+void _array_elements_type(value v, int* idx, value_type* types)
+{
+    if (is_array(v))
+    {
+        for (int i = 0; i < v.size; i++)
+            _array_elements_type(array_at(v, i), idx, types);
+        return;
+    }
+    types[*idx] = v.type;
+    *idx += 1;
+}
+
+value_type array_elements_type(value arr)
+{
+    assert(is_array(arr));
+
+    int t = tally(arr);
+    value_type* types = malloc(sizeof(value_type) * t);
+    int idx = 0;
+    _array_elements_type(arr, &idx, types);
+
+    value_type lead = types[0];
+    for (int i = 1; i < t; i++) {
+        if (lead != types[i]) {
+            free(types);
+            return -1;
+        }
+    }
+    free(types);
+    return lead;
+}
+
+
+void pretty_value(value v, bool a)
+{
     switch (v.type) 
     {
         case character:
-            sprintf(ret, "%c", v.data.c);
+            printf("'%c'", v.data.c);
             break;
         case constant:
-            sprintf(
-                ret, 
-                fmodl(v.data.constant, 1) == 0 ? "%.0lf" : "%.4lf",
+            printf(
+                fmodl(v.data.constant, 1) == 0 ? "%3.0lf" : "%3.4lf",
                 v.data.constant
             );
             break;
         case string:
             {
-                free(ret);
-                ret = malloc(sizeof(char) * v.size + 3);
-                ret[v.size] = '\0';
-
                 char* s = get_string(v);
-                sprintf(ret, "\"%s\"", s);
-                free(s);
-
-                return ret;
+                printf("\"%s\"", s);
             }
             break;
         case array:
-            ret[0] = '(';
-            ret[1] = '(';
-            ret[2] = '\0';
-            for (int i = 0; i < v.size; i++) 
-            {
-                strcat(ret, " ");
-                strcat(ret, pretty_value(v.data.array[i]));
+            if (v.size > 0 && array_at(v, 0).type == array) {
+                if (a) printf("\n");
+                for (int i = 0; i < v.size; i++)
+                {
+                    value v2 = array_at(v, i);
+                    for (int j = 0; j < v2.size; j++)
+                    {
+                        pretty_value(array_at(v2, j), a);
+                        printf(" ");
+                    }
+                    if (i != v.size-1)
+                        printf("\n");
+                }
+                return;
             }
-            strcat(ret, " ))");
+            printf("(( ");
+
+            for (int i = 0; i < v.size; i++)  {
+                pretty_value(v.data.array[i], false);
+                printf(" ");
+            }
+
+            printf("))");
             break;
         case nest:
-            ret[0] = '[';
-            ret[1] = '\0';
+            printf("[ ");
             for (int i = 0; i < v.size; i++) 
-            {
-                strcat(ret, " ");
-                strcat(ret, v.data.nest + i * token_stride);
-            }
-            strcat(ret, " ]");
+                printf("%s ", v.data.nest + (i*token_stride));
+            printf("]");
             break;
         default:
-            sprintf(ret, "?value %d?", v.type);
+            printf("?value %d?", v.type);
             break;
     }
-    return ret;
 }
 
-void print_pretty_value(value v)
+void print_pretty_value(value v, bool display_type)
 {
-    char* pp = pretty_value(v);
-    printf("%s\n", pp);
-    free(pp);
-}
-
-char* value_repr(value v)
-{
-
-    char* s = pretty_value(v);
-    int size = sizeof(char) * (strlen(type_string[v.type]) + strlen(s)) + 5 + 1;
-    char* ret = malloc(size);
-
-    ret[size-1] = '\0';
-
-    sprintf(ret, "( %s ) %s", type_string[v.type], s);
-    free(s);
-
-    return ret;
+    if (display_type)
+    {
+        if (v.type == array && v.size > 1)
+        {
+            int et = array_elements_type(v);
+            if (et < 0)
+                printf("( array ) ");
+            else {
+                printf("( %s array ) ", type_string[et]);
+            }
+        }
+        else {
+            printf("( %s ) ", type_string[v.type]);
+        }
+    }
+    pretty_value(v, display_type);
+    printf("\n");
 }
 
 void print_vars()
@@ -240,10 +281,10 @@ void print_vars()
     for (int i = 0; i < var_count; i++) 
     {
 
-        char* value_string = value_repr(var_data[i]);
-        printf("\"%s\": %s\n", var_names[i], value_string);
-
-        free(value_string);
+        // char* value_string = value_repr(var_data[i]);
+        printf("\"%s\":\n", var_names[i]);
+        print_pretty_value(var_data[i], false);
+        printf("\n");
     }
 }
 
@@ -253,18 +294,20 @@ void print_stack()
         ?  0 
         : stack_size - stack_print_limit;
 
+    printf("--\t--\t--\n");
+    printf("stack (%d-%d):\n", stack_size, stack_size-limit);
+    printf("--\t--\t--\n");
+
     for (int i = stack_size-1; i >= limit; i--) 
     {
 
         value v = stack[i];
 
-        char* value_string = value_repr(v);
-
-        printf("%d: %s\n", i, value_string);
-        printf("========================================\n");
-
-        free(value_string);
+        print_pretty_value(v, true);
+        printf("--\t--\t--\n");
     }
+    printf("end of stack\n");
+    printf("--\t--\t--\n");
 }
 
 void push(value v)
@@ -311,7 +354,8 @@ value new_character(char c)
     return (value) 
         {
             .type = character,
-            .data.c = c
+            .data.c = c,
+            .size = 0
         };
 }
 
@@ -320,7 +364,8 @@ value new_constant(double c)
     return (value) 
         {
             .type = constant,
-            .data.constant = c
+            .data.constant = c,
+            .size = 0
         };
 }
 
@@ -431,21 +476,16 @@ void free_value(value v)
 {
     switch (v.type) 
     {
-
         case array:
-
             for (int i = 0; i < v.size; i++) 
             {
                 free_value(v.data.array[i]);
             }
             free(v.data.array);
             break;
-
         case nest:
-
             free(v.data.nest);
             break;
-
         default:
             break;
     }
@@ -479,8 +519,9 @@ value binary_op(value val1, value val2, value (*func)(value,value))
     if (map_val1 && map_val2 && val1.size != val2.size) 
     {
         fprintf(
-            stderr, "error: size mismatch between %s and %s (%d x %d)!\n", 
-            value_repr(val1), value_repr(val2), val1.size, val2.size);
+            stderr,
+            "error: size mismatch (%d x %d)!\n",
+            val1.size, val2.size);
         // exit() é o melhor free() de todos
         exit(1);
     }
@@ -520,6 +561,12 @@ value name(value a, value b) { \
     } \
     if (is_array(a) || is_array(b)) { \
         return binary_op(a, b, name); \
+    } \
+    if (is_char(a) && !is_char(b)) { \
+        return binary_op(new_constant(a.data.c), b, name); \
+    } \
+    else if (!is_char(a) && is_char(b)) { \
+        return binary_op(a, new_constant(b.data.c), name); \
     } \
     assert(false); \
 }
@@ -665,6 +712,63 @@ binary_op_type_handling(
 value or() 
 {
     return binary_op(pop(), pop(), __or);
+}
+
+// binary_op_type_handling(
+//     __mask, 
+//     a.data.constant || b.data.constant,
+//     binary_type_handler_op_not_defined_error("or", "character"),
+//     binary_type_handler_op_not_defined_error("or", "string")
+// );
+//
+//
+// value mask() 
+// {
+//     return binary_op(pop(), pop(), __mask);
+// }
+
+value mask() 
+{
+    value mask = pop(), filter = pop();
+
+    if (mask.size != filter.size) 
+    {
+        fprintf(stderr, "error: mask and array have different sizes!\n");
+        exit(1);
+    }
+    value arr = new_array(0);
+    for (int i = 0; i < mask.size; i++) 
+    {
+
+        if (get_constant(array_at(mask, i)) == 1.0) 
+        {
+            array_append(&arr, array_at(filter, i));
+        }
+    }
+    return arr;
+}
+
+
+value broadcast;
+
+value _element_by_element(value a, value b) {
+    if (is_array(a) || is_array(b)) {
+        return binary_op(a, b, _element_by_element);
+    }
+
+    push(a);
+    push(b);
+    execute(broadcast.data.nest, broadcast.size);
+    return pop();
+}
+
+value element_by_element() {
+    broadcast = pop();
+    if (broadcast.type != nest) {
+        fprintf(stderr, "error: broadcast operation must be nested\n");
+        exit(1);
+    }
+    return binary_op(pop(), pop(), _element_by_element);
 }
 
 
@@ -881,28 +985,6 @@ void clear()
 //     return arr;
 // }
 
-value mask() 
-{
-    value mask = pop(), filter = pop();
-
-    if (mask.size != filter.size) 
-    {
-        fprintf(stderr, "error: mask and array have different sizes!\n");
-        exit(1);
-    }
-    value arr = new_array(0);
-    for (int i = 0; i < mask.size; i++) 
-    {
-
-        if (get_constant(array_at(mask, i)) == 1.0) 
-        {
-            array_append(&arr, array_at(filter, i));
-        }
-    }
-
-    return arr;
-}
-
 value _index() 
 {
     value mask = pop();
@@ -961,7 +1043,23 @@ value reverse()
 value at() 
 {
     value at = pop(), arr = pop();
-    return array_at(arr, get_constant(at));
+
+    double index = get_constant(at);
+
+    if (index < 0 || index >= arr.size) {
+        fprintf(stderr, "error: index out of bounds!\n");
+        exit(1);
+    }
+    if (fmodl(index, 1) != 0) {
+        fprintf(
+            stderr,
+            "error: can't index array by floating point constant! "
+            "(index: %lf)\n", index);
+        print_pretty_value(arr, false);
+        exit(1);
+    }
+
+    return array_at(arr, index);
 }
 
 void reduce_left() 
@@ -971,13 +1069,13 @@ void reduce_left()
     if (nested_op.type != nest) 
     {
         fprintf(stderr, "error: can only apply nested operations to arrays!!\n");
-        print_pretty_value(nested_op);
+        print_pretty_value(nested_op, false);
         exit(1);
     }
     if (arr.type != array) 
     {
         fprintf(stderr, "error: can't reduce what's not an array!\n");
-        print_pretty_value(arr);
+        print_pretty_value(arr, false);
         exit(1);
     }
 
@@ -996,13 +1094,13 @@ value accumulate_left()
     if (nested_op.type != nest) 
     {
         fprintf(stderr, "error: can only apply nested operations to arrays!!\n");
-        print_pretty_value(nested_op);
+        print_pretty_value(nested_op, false);
         exit(1);
     }
     if (arr.type != array) 
     {
         fprintf(stderr, "error: can't reduce what's not an array!\n");
-        print_pretty_value(arr);
+        print_pretty_value(arr, false);
         exit(1);
     }
 
@@ -1299,12 +1397,13 @@ rewind:
 
         else if (strcmp(current, "#") == 0)
         {
-            push(new_constant(peek().size));
+            value p = peek();
+            push(new_constant(is_array(p) || p.type == nest ? p.size : 1));
         }
 
         else if (strcmp(current, "at") == 0)
         {
-            push(wrap_array(at()));
+            push(at());
         }
 
         else if (strcmp(current, "abs") == 0)
@@ -1314,7 +1413,7 @@ rewind:
 
         else if (strcmp(current, "pp")  == 0) 
         {
-            print_pretty_value(peek());
+            print_pretty_value(peek(), false);
         }
 
         else if (strcmp(current, "nl")  == 0) 
@@ -1325,7 +1424,7 @@ rewind:
         else if (strcmp(current, "fmt")  == 0) 
         {
             value string = pop();
-            print_pretty_value(string);
+            print_pretty_value(string, false);
         }
 
         else if (strcmp(current, "ps")  == 0) 
@@ -1400,12 +1499,6 @@ rewind:
             push(accumulate_left());
         }
 
-        else if (strcmp(current, "del") == 0)
-        {
-            push(not());
-            push(mask());
-        }
-
         else if (strcmp(current, "rev") == 0)
         {
             push(reverse());
@@ -1437,7 +1530,7 @@ rewind:
             if (nesting.type != nest) 
             {
                 fprintf(stderr, "error: can't execute what is not a nest!\n");
-                print_pretty_value(nesting);
+                print_pretty_value(nesting, false);
                 exit(1);
             }
             execute(nesting.data.nest, nesting.size);
@@ -1449,7 +1542,7 @@ rewind:
             if (nesting.type != nest) 
             {
                 fprintf(stderr, "error: can't execute what is not a nest!\n");
-                print_pretty_value(nesting);
+                print_pretty_value(nesting,false );
                 exit(1);
             }
 
@@ -1457,7 +1550,7 @@ rewind:
             {
                 fprintf(stderr, "error: can't rewind a nest outside of itself! "
                         "try using the 'x' command!\n");
-                print_pretty_value(nesting);
+                print_pretty_value(nesting, false);
                 exit(1);
             }
             // execute(nesting.data.nest, nesting.size);
@@ -1470,11 +1563,10 @@ rewind:
         else if (strcmp(current, "unb") == 0) // inutil?
         {
             value arr = pop();
-            if (arr.type != array) 
+            if (!is_array(arr)) 
             {
-                fprintf(stderr, "error: can't unbind what is not an array!\n");
-                print_pretty_value(arr);
-                exit(1);
+                push(arr);
+                continue;
             }
             for (int i = 0; i < arr.size; i++) 
             {
@@ -1603,6 +1695,11 @@ rewind:
         else if (strcmp(current, "<0") == 0)
         {
             push(lt0());
+        }
+
+        else if (strcmp(current, "$") == 0)
+        {
+            push(element_by_element());
         }
 
         else if (strcmp(current, "cos") == 0)
@@ -1757,7 +1854,7 @@ int main(int argc, char** argv)
         return 1;
     }
 
-    print_pretty_value(last);
+    print_pretty_value(last, false);
 
 
     free_value(program);

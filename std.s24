@@ -79,11 +79,47 @@
     x A a
 ] !-> arr
 
+( delete )
+[ not msk ] !-> del
+
 
 [ -> F -> H -> A -> B
     A H x
     B H x
     F x
 ] !-> cmb2
+
+( append )
+[ 
+    # -> LenA -> A 
+    # -> LenB -> B
+    B unb
+    A unb
+
+    LenA LenB + a
+] !-> app
+
+[
+    -> Mask # -> Len -> Array
+
+    [ ] arr -> Ret
+
+    0 -> I
+    .loop I Len < ? nop .over
+
+        Mask I at ? .add .end
+
+        .add
+            Ret Array I at app -> Ret ;
+        .end
+
+
+        I ++ -> I
+    1 ? .loop nop
+    .over
+    
+    Ret
+
+] !-> msk2
 
 ( todo: limpar variaveis )
