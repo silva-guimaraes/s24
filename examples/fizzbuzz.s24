@@ -1,0 +1,18 @@
+
+
+100 ran [
+    dup 15 mod 0 = ? .fizzbuzz
+    dup 3  mod 0 = ? .fizz
+    dup 5  mod 0 = ? .buzz .number
+
+    .fizzbuzz
+        "fizzbuzz" ;
+    .fizz
+        "fizz" ;
+    .buzz
+        "buzz" ;
+    .number
+        dup ;
+    .end
+    fmt
+] $. pop
