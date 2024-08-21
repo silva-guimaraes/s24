@@ -887,6 +887,28 @@ unary_op_type_handling(
     }
 )
 
+unary_op_type_handling(
+    ___round, 
+    {
+        return new_constant(lroundf(v.data.constant));
+    },
+    {
+        return v;
+    }, 
+    unary_type_handler_op_not_defined_error("round", "string")
+)
+
+unary_op_type_handling(
+    ___abs, 
+    {
+        return new_constant(fabsl(v.data.constant));
+    },
+    {
+        return v;
+    }, 
+    unary_type_handler_op_not_defined_error("round", "string")
+)
+
 value  not()
 {
     return unary_op(pop(), _not);
@@ -899,14 +921,12 @@ value is_prime()
 
 value _round()
 {
-    fprintf(stderr, "not implmemented yet");
-    exit(1);
+    return unary_op(pop(), ___round);
 }
 
 value _abs()
 {
-    fprintf(stderr, "not implmemented yet");
-    exit(1);
+    return unary_op(pop(), ___abs);
 }
 
 value _cos()
