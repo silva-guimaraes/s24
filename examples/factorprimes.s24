@@ -1,6 +1,6 @@
 
 
-[   ( N -- N 2 -- N )
+[
     2   -> Divisor
     [ ] arr
     swp
@@ -8,13 +8,13 @@
 
         dup Divisor mod 0 = ? .if .else
 
-            .if 
-                ( [ ] N -- N [ ] -- N [ Divisor ] -- [ Divisor ] N )
-                swp
-                Divisor app
-                swp
-                Divisor / ;
-            .else Divisor ++ -> Divisor ;
+            .if                 ( [ ] N )
+                swp             ( N [ ] )
+                Divisor app     ( N [ Divisor ] )
+                swp             ( [ Divisor ] N )
+                Divisor / ;     ( [ Divisor ] N Divisor / )
+            .else 
+                Divisor ++ -> Divisor ;
         .end
 
     over pop
