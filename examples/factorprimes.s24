@@ -11,7 +11,7 @@
             .if 
                 ( [ ] N -- N [ ] -- N [ Divisor ] -- [ Divisor ] N )
                 swp
-                [ Divisor ] arr app
+                Divisor app
                 swp
                 Divisor / ;
             .else Divisor ++ -> Divisor ;
