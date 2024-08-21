@@ -16,6 +16,10 @@
 ] !-> swp
 
 
+[ #1 ] !-> dup2
+
+
+
 ( increment & decrement )
 [ 1 + ] !-> ++
 [ 1 - ] !-> --
@@ -99,27 +103,17 @@
     LenA LenB + a
 ] !-> app
 
-[
-    -> Mask # -> Len -> Array
 
-    [ ] arr -> Ret
-
-    0 -> I
-    .loop I Len < ? nop .over
-
-        Mask I at ? .add .end
-
-        .add
-            Ret Array I at app -> Ret ;
-        .end
+[ -> Until
+    0 loop dup Until < do
+        dup ++
+    over pop
+    Until a
+] !-> ran
 
 
-        I ++ -> I
-    1 ? .loop nop
-    .over
-    
-    Ret
-
-] !-> msk2
+[ -> Until -> From
+    Until From - ran From +
+] !-> ran2
 
 ( todo: limpar variaveis )

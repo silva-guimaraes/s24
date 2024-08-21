@@ -37,6 +37,11 @@ typedef struct value {
     bool auto_exec;
 } value;
 
+typedef value s24_array;
+typedef value s24_nest;
+typedef value s24_constant;
+typedef value s24_string;
+
 
 int stack_size = 0;
 value stack[max_stack];
@@ -208,7 +213,7 @@ void pretty_value(value v, bool a)
             break;
         case constant:
             printf(
-                fmodl(v.data.constant, 1) == 0 ? "%3.0lf" : "%3.4lf",
+                fmodl(v.data.constant, 1) == 0 ? "%-4.0lf" : "%-4.4lf",
                 v.data.constant
             );
             break;
@@ -294,9 +299,7 @@ void print_stack()
         ?  0 
         : stack_size - stack_print_limit;
 
-    printf("--\t--\t--\n");
-    printf("stack (%d-%d):\n", stack_size, stack_size-limit);
-    printf("--\t--\t--\n");
+    printf("stack (%d-%d):\n\n", stack_size, stack_size-limit);
 
     for (int i = stack_size-1; i >= limit; i--) 
     {
@@ -304,7 +307,7 @@ void print_stack()
         value v = stack[i];
 
         print_pretty_value(v, true);
-        printf("--\t--\t--\n");
+        // printf("--\t--\t--\n");
     }
     printf("end of stack\n");
     printf("--\t--\t--\n");
@@ -749,27 +752,10 @@ value mask()
 }
 
 
-value broadcast;
 
-value _element_by_element(value a, value b) {
-    if (is_array(a) || is_array(b)) {
-        return binary_op(a, b, _element_by_element);
-    }
 
-    push(a);
-    push(b);
-    execute(broadcast.data.nest, broadcast.size);
-    return pop();
-}
 
-value element_by_element() {
-    broadcast = pop();
-    if (broadcast.type != nest) {
-        fprintf(stderr, "error: broadcast operation must be nested\n");
-        exit(1);
-    }
-    return binary_op(pop(), pop(), _element_by_element);
-}
+
 
 
 
@@ -1043,6 +1029,7 @@ value reverse()
 value at() 
 {
     value at = pop(), arr = pop();
+    push(arr), push(at);
 
     double index = get_constant(at);
 
@@ -1114,6 +1101,50 @@ value accumulate_left()
     }
     pop();
     return acc;
+}
+
+
+
+
+s24_nest broadcast;
+
+value _unary_broadcast(value v) {
+    if (is_array(v)) {
+        return unary_op(v, _unary_broadcast);
+    }
+
+    push(v);
+    execute(broadcast.data.nest, broadcast.size);
+    return pop();
+}
+
+value _binary_broadcast(value a, value b) {
+    if (is_array(a) || is_array(b)) {
+        return binary_op(a, b, _binary_broadcast);
+    }
+
+    push(a);
+    push(b);
+    execute(broadcast.data.nest, broadcast.size);
+    return pop();
+}
+
+value binary_broadcast() {
+    broadcast = pop();
+    if (broadcast.type != nest) {
+        fprintf(stderr, "error: broadcast operation must be nested\n");
+        exit(1);
+    }
+    return binary_op(pop(), pop(), _binary_broadcast);
+}
+
+value unary_broadcast() {
+    broadcast = pop();
+    if (broadcast.type != nest) {
+        fprintf(stderr, "error: broadcast operation must be nested\n");
+        exit(1);
+    }
+    return unary_op(pop(), _unary_broadcast);
 }
 
 
@@ -1238,7 +1269,7 @@ rewind:
             continue;
         }
 
-        if (current[0] == '.') 
+        if (current[0] == '.' || strcmp(current, "loop") == 0) 
         {
             continue;
         }
@@ -1367,6 +1398,54 @@ rewind:
                 fprintf(stderr, "error: couldn't find label \"%s\"!\n", else_label);
                 exit(1);
             }
+        }
+
+        else if (strcmp(current, "loop") == 0)
+        {
+            continue;
+        }
+
+        else if (strcmp(current, "do") == 0)
+        {
+            if (get_constant(pop())) {
+                continue;
+            }
+            else {
+                char* i = current + token_stride;
+                int level = 1;
+                for (; i < last; i += token_stride) {
+                    if (strcmp(i, "do") == 0)
+                        level++;
+                    if (strcmp(i, "over") == 0)
+                        level--;
+                    if (level == 0)
+                        break;
+                }
+                if (level > 0) {
+                    fprintf(stderr, "error: loop without over\n");
+                    exit(1);
+                }
+                current = i;
+            }
+        }
+
+        else if (strcmp(current, "over") == 0)
+        {
+            int level = 1;
+            char* i = current - token_stride;
+            for (; i >= start ; i -= token_stride) {
+                if (strcmp(i, "over") == 0)
+                    level++;
+                if (strcmp(i, "loop") == 0)
+                    level--;
+                if (level == 0)
+                    break;
+            }
+            if (level > 0) {
+                fprintf(stderr, "error: over without loop\n");
+                exit(1);
+            }
+            current = i;
         }
 
         else if (strcmp(current, ";") == 0) 
@@ -1697,9 +1776,14 @@ rewind:
             push(lt0());
         }
 
-        else if (strcmp(current, "$") == 0)
+        else if (strcmp(current, "$:") == 0)
         {
-            push(element_by_element());
+            push(binary_broadcast());
+        }
+
+        else if (strcmp(current, "$.") == 0)
+        {
+            push(unary_broadcast());
         }
 
         else if (strcmp(current, "cos") == 0)
