@@ -1842,9 +1842,12 @@ rewind:
 
 void print_usage() 
 {
-    printf("usage: s24 [options] input-file\n\n"
-           "options:\n"
-           "   -h, --help\tprint this help text and exit\n");
+    printf(
+        "usage: s24 [options] input-file\n"
+        "options:\n"
+        "   -h, --help\tprint this help text and exit.\n"
+        "   -e, --eval\tevaluate string from the command line and exit.\n"
+    );
 }
 
 void print_stack_and_quit() 
@@ -1875,15 +1878,25 @@ int main(int argc, char** argv)
 
     signal(SIGINT, print_stack_and_quit);
 
+
     // input
     char* input_path = NULL;
+    FILE* source_stream = NULL;
+
     for (int i = 1; i < argc; i++) 
     {
-        if (strcmp(argv[i], "--help") == 0 || strcmp(argv[i], "--help") == 0)
+        if      (strcmp(argv[i], "-h") == 0 || strcmp(argv[i], "--help") == 0)
         {
             print_usage();
             return 0;
         }
+
+        else if (strcmp(argv[i], "-e") == 0 || strcmp(argv[i], "--eval") == 0)
+        {
+            source_stream = fmemopen(argv[i+1], strlen(argv[i+1]), "r");
+            i++;
+        }
+
         else if (*argv[i] == '-')
         {
             fprintf(stderr, "error: unrecognized option \"%s\"!\n", argv[i]);
@@ -1893,7 +1906,20 @@ int main(int argc, char** argv)
 
         else if (input_path == NULL)
         {
+            if (source_stream) 
+            {
+                fprintf(stderr, "error: source program already specified with flag --eval/-e. won't read file\n");
+                return 1;
+            }
+
             input_path = argv[i];
+            source_stream = fopen(input_path, "r");
+
+            if (!source_stream) 
+            {
+                fprintf(stderr, "error: can't open file \"%s\"\n", input_path);
+                return 1;
+            }
         }
 
         else {
@@ -1903,37 +1929,26 @@ int main(int argc, char** argv)
         }
     }
 
-    if (!input_path) 
+    if (!source_stream) 
     {
         fprintf(stderr, "error: missing input file.\n");
         print_usage();
         return 1;
     }
 
-    FILE* in = fopen(input_path, "r");
-    if (!in) 
-    {
-        fprintf(stderr, "error: can't open file \"%s\"\n", input_path);
-        return 1;
-
-    }
-
-
-    if (chdir(dirname(input_path)) == -1) 
+    if (input_path && chdir(dirname(input_path)) == -1) 
     {
         fprintf(stderr, "error: failed chaging directory\n");
         exit(1);
     }
-
 
     FILE* std_in = fmemopen(std, std_len, "r");
     value std_program = tokenize(std_in);
     execute(std_program.data.nest, std_program.size);
 
 
-    value program = tokenize(in);
-
     // eval
+    value program = tokenize(source_stream);
     execute(program.data.nest, program.size);
 
 
