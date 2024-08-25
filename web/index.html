@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>s24</title>
+    <!-- <link href="style.css" rel="stylesheet"> -->
+    <style>
+    html {
+      font-family: monospace;
+    }
+    html, body {
+      margin: 0;
+      height: 73%;
+      padding-top: 50px;
+    }
+    #output {
+    }
+    .bar {
+      display: flex;
+      background-color: #eee;
+      border: 1px solid #999;
+      padding: 10px;
+    }
+    #controls {
+      border-top: 0;
+    }
+    #content {
+      max-width: 1000px;
+      height: 100%;
+      margin: auto;
+    }
+    #text-areas {
+      display: flex;
+      margin-top: 30px;
+      height: 100%;
+    }
+    h3 {
+      margin: 0px;
+    }
+    .text {
+      width: 50%;
+      min-height: 100%;
+      display: flex;
+      flex-direction: column;
+      p {
+        margin: 2px 0 2px 0;
+      }
+    }
+    pre, textarea {
+      overflow-x: scroll;
+    }
+    .input-output {
+      padding: 7px;
+      margin: 0;
+      border: 1px solid #ccc;
+      resize: none;
+      flex-grow: 1;;
+    }
+    </style>
+  </head>
+  <body>
+    <!-- <nav> -->
+    <!--   <h3>s24</h3> -->
+    <!-- </nav> -->
+    <div id="content">
+      <div class="bar">
+        <h3>s24</h3> 
+      </div>
+      <div class="bar" id="controls">
+        <button id="run">run</button>
+      </div>
+      <div id="text-areas">
+        <div class="text">
+          <p>in</p>
+          <textarea class="input-output" autocomplete="off" autocorrect="off" spellcheck="false" placeholder="program goes here"></textarea>
+        </div>
+        <div class="text">
+          <p>out</p>
+          <pre  class="input-output"></pre>
+        </div>
+      </div>
+    </div>
+    <script>
+    let runButton = document.querySelector('#run');
+    let inputTextarea = document.querySelector('textarea');
+    let outputArea = document.querySelector('pre');
+    runButton.onclick = () => alert('interpreter has not been intialized yet.');
+
+    function run() {
+    }
+    let output;
+    var Module = {
+      arguments: ['-e', ''],
+      thisProgram: './s24',
+      onRuntimeInitialized: () => {
+        let run = Module.cwrap('run_from_string', 'number', ['string']);
+
+        runButton.onclick = () => {
+          run(inputTextarea.value);
+          outputArea.textContent += '\n'
+          outputArea.scrollTo(0, outputArea.scrollHeight);
+          console.log(outputArea.scrollHeight)
+        };
+      },
+      print: (...args) => {
+        outputArea.textContent += `  ${args.join('\n')}\n`
+      }
+    }
+    </script>
+    <script async type="text/javascript" src="wasm.js"></script>
+  </body>
+</html>

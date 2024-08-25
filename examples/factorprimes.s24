@@ -20,4 +20,5 @@
     over pop
 ] !-> FactorPrimes
 
-42 FactorPrimes
+
+42 pp FactorPrimes

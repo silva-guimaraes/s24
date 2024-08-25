@@ -589,10 +589,10 @@ binary_op_type_handling(
         return new_character(a.data.c + b.data.c);
     },
     {
-        value n = copy(a);
-        for (int i = 0; i < b.size; i++) 
+        value n = copy(b);
+        for (int i = 0; i < a.size; i++) 
         {
-            array_append(&n, array_at(b, i));
+            array_append(&n, array_at(a, i));
         }
         return n;
     }
@@ -1873,6 +1873,56 @@ value tokenize(FILE* in)
     return n;
 }
 
+int run_from_stream(FILE* in) {
+
+    FILE* source_stream = in;
+
+    // standard library
+    FILE* std_in = fmemopen(std, std_len, "r");
+    value std_program = tokenize(std_in);
+    execute(std_program.data.nest, std_program.size);
+
+
+    // eval
+    value program = tokenize(source_stream);
+    execute(program.data.nest, program.size);
+
+
+
+    // output
+    if (stack_size > 1) 
+    {
+        fprintf(stderr, "error: stack remaining!\n");
+        print_stack();
+        return 1;
+    }
+    else if (stack_size == 0) 
+    {
+        return 0;
+    }
+
+    value last = pop();
+    if (last.type == operation)
+    {
+        fprintf(stderr, "error: lonely operation!\n");
+        print_stack();
+        return 1;
+    }
+
+    print_pretty_value(last, false);
+
+
+    free_value(program);
+    free_value(std_program);
+
+
+    return 0;
+}
+
+int run_from_string(char* string) {
+    return run_from_stream(fmemopen(string, strlen(string), "r"));
+}
+
 int main(int argc, char** argv) 
 {
 
@@ -1942,43 +1992,5 @@ int main(int argc, char** argv)
         exit(1);
     }
 
-    FILE* std_in = fmemopen(std, std_len, "r");
-    value std_program = tokenize(std_in);
-    execute(std_program.data.nest, std_program.size);
-
-
-    // eval
-    value program = tokenize(source_stream);
-    execute(program.data.nest, program.size);
-
-
-
-    // output
-    if (stack_size > 1) 
-    {
-        fprintf(stderr, "error: stack remaining!\n");
-        print_stack();
-        return 1;
-    }
-    else if (stack_size == 0) 
-    {
-        return 0;
-    }
-
-    value last = pop();
-    if (last.type == operation)
-    {
-        fprintf(stderr, "error: lonely operation!\n");
-        print_stack();
-        return 1;
-    }
-
-    print_pretty_value(last, false);
-
-
-    free_value(program);
-    free_value(std_program);
-
-
-    return 0;
+    return run_from_stream(source_stream);
 }
